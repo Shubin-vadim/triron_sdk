@@ -1,4 +1,4 @@
-# triton-sdk
+# Triton-sdk
 
 Python SDK для NVIDIA Triton Inference Server, ориентированный на LLM-нагрузки
 (TensorRT-LLM и vLLM бэкенды). Один публичный API — `generate` / `stream` / `chat`,
@@ -31,9 +31,11 @@ for chunk in client.chat.completions.create(model="vllm_model", messages=[...], 
 
 - `protocol="http" | "grpc"` — нативный KServe v2, работает с любым Triton; chat-template и `usage` считаются на клиенте.
 - `protocol="openai"` — OpenAI-фронтенд Triton (`/v1/chat/completions`, порт 9000); шаблон и `usage` делает сервер,
-  `native` недоступен.
+`native` недоступен.
 `usage` считается токенайзером из `tokenizer=` (без него — `None`). `tools`, `response_format`, `n > 1` не поддерживаются
 и вызывают `UnsupportedParameterError`; `extra_body={"top_k": ...}` пробрасывает бэкенд-специфичные параметры.
+
+
 
 ## Документация
 
@@ -43,23 +45,29 @@ for chunk in client.chat.completions.create(model="vllm_model", messages=[...], 
 - [docs/backends.md](docs/backends.md) — схемы vLLM / TensorRT-LLM, таблица маппинга параметров
 - [monitoring/README.md](monitoring/README.md) — Prometheus + Grafana
 
+
+
 ## Структура
 
-| Путь | Роль |
-|------|------|
-| `triton_sdk/client/` | Публичный API: `TritonLLMClient` (sync) и `AsyncTritonLLMClient` |
-| `triton_sdk/transport/` | Сетевой слой: `TransportInterface` + `HttpTransport` / `GrpcTransport`, SSE-парсер, protobuf-стабы |
-| `triton_sdk/backends/` | Адаптеры схемы входов/выходов: `tensorrt_llm`, `vllm`, `generic` (generate-endpoint) |
-| `triton_sdk/chat/` | Chat-шаблоны: список сообщений → сырой prompt, подсчёт токенов |
-| `triton_sdk/openai/` | OpenAI-совместимый фасад: `chat.completions`, `completions`, `models` с типами как в `openai` |
-| `triton_sdk/core/models/` | Pydantic-модели запросов, ответов, метаданных, тензоров |
-| `triton_sdk/core/constants/` | Протоколы, пути KServe v2, коды ошибок, retry-статусы |
-| `triton_sdk/settings.py` | `TritonSettings` (`pydantic-settings`, префикс `TRITON_`) |
-| `triton_sdk/exceptions.py` | Иерархия `TritonError` |
-| `triton_sdk/tests/` | `unit/` (моки транспорта), `integration/` (живой Triton, маркер `integration`) |
-| `examples/` | Готовые сценарии использования |
-| `model_repository/` | Минимальная vLLM-модель для интеграционных тестов |
-| `monitoring/` | Prometheus + Grafana (дашборд Triton LLM), см. `monitoring/README.md` |
+
+| Путь                         | Роль                                                                                               |
+| ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `triton_sdk/client/`         | Публичный API: `TritonLLMClient` (sync) и `AsyncTritonLLMClient`                                   |
+| `triton_sdk/transport/`      | Сетевой слой: `TransportInterface` + `HttpTransport` / `GrpcTransport`, SSE-парсер, protobuf-стабы |
+| `triton_sdk/backends/`       | Адаптеры схемы входов/выходов: `tensorrt_llm`, `vllm`, `generic` (generate-endpoint)               |
+| `triton_sdk/chat/`           | Chat-шаблоны: список сообщений → сырой prompt, подсчёт токенов                                     |
+| `triton_sdk/openai/`         | OpenAI-совместимый фасад: `chat.completions`, `completions`, `models` с типами как в `openai`      |
+| `triton_sdk/core/models/`    | Pydantic-модели запросов, ответов, метаданных, тензоров                                            |
+| `triton_sdk/core/constants/` | Протоколы, пути KServe v2, коды ошибок, retry-статусы                                              |
+| `triton_sdk/settings.py`     | `TritonSettings` (`pydantic-settings`, префикс `TRITON_`)                                          |
+| `triton_sdk/exceptions.py`   | Иерархия `TritonError`                                                                             |
+| `triton_sdk/tests/`          | `unit/` (моки транспорта), `integration/` (живой Triton, маркер `integration`)                     |
+| `examples/`                  | Готовые сценарии использования                                                                     |
+| `model_repository/`          | Минимальная vLLM-модель для интеграционных тестов                                                  |
+| `monitoring/`                | Prometheus + Grafana (дашборд Triton LLM), см. `monitoring/README.md`                              |
+
+
+
 
 ## Быстрый старт
 
@@ -96,3 +104,4 @@ gRPC-стабы генерируются из protobuf Triton: `scripts/gen_prot
 - gRPC предпочтителен для стриминга (decoupled mode) и отмены генерации на сервере.
 - Бэкенд определяется автоматически по `model_config` (имена входов), можно задать явно.
 - Библиотека не настраивает root logger; `triton_sdk.config.configure_logging()` — opt-in для примеров и тестов.
+
