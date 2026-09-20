@@ -1,0 +1,80 @@
+# Triton Inference Server (vLLM backend) for integration tests. Requires NVIDIA Container Toolkit.
+#
+# Pick ONE profile (both load the same model, one GPU cannot hold two copies):
+#   docker compose --profile openai up -d   # OpenAI frontend on 9000 + KServe HTTP 8000 / gRPC 8001  (default choice)
+#   docker compose --profile native up -d   # plain tritonserver: KServe HTTP 8000 / gRPC 8001 only
+# then: scripts/wait_for_triton.sh && pytest -m integration
+
+x-triton: &triton
+  image: nvcr.io/nvidia/tritonserver:25.08-vllm-python-py3
+  volumes:
+    - ./model_repository:/models
+    - hf-cache:/root/.cache/huggingface
+  environment:
+    HF_TOKEN: ${HF_TOKEN:-}
+  shm_size: "2g"
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            count: 1
+            capabilities: [gpu]
+
+services:
+  # OpenAI-compatible frontend (server repo python/openai). It embeds Triton, so with --enable-kserve-frontends
+  # the same process also serves the native KServe endpoints: every SDK code path is testable against one container.
+  openai:
+    <<: *triton
+    profiles: [openai]
+    command: >
+      python3 /opt/tritonserver/python/openai/openai_frontend/main.py
+      --model-repository /models
+      --tokenizer ${TRITON_CHAT_TEMPLATE_MODEL:-Qwen/Qwen2.5-0.5B-Instruct}
+      --backend vllm
+      --openai-port 9000
+      --enable-kserve-frontends
+      --kserve-http-port 8000
+      --kserve-grpc-port 8001
+    ports:
+      - "9000:9000"   # OpenAI /v1/*
+      - "8000:8000"   # KServe HTTP
+      - "8001:8001"   # KServe gRPC
+
+  native:
+    <<: *triton
+    profiles: [native]
+    command: tritonserver --model-repository=/models --log-verbose=0
+    ports:
+      - "8000:8000"   # HTTP
+      - "8001:8001"   # gRPC
+      - "8002:8002"   # metrics
+
+
+  # --- monitoring: docker compose --profile openai --profile monitoring up -d ------------------
+  prometheus:
+    image: prom/prometheus:latest
+    profiles: [monitoring]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:latest
+    profiles: [monitoring]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/triton-llm.json
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus]
+
+volumes:
+  hf-cache:

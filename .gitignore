@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Env / secrets
+.env
+*.env
+env.sh
+logs/
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/settings.json
+.DS_Store
+
+# Models / artifacts (integration tests mount them, never commit weights)
+model_repository/**/*.bin
+model_repository/**/*.safetensors
+model_repository/**/*.engine

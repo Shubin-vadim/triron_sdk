@@ -1,0 +1,6 @@
+[
+  {"model_name": "vllm_model", "model_version": "1", "text_output": "Hello"},
+  {"model_name": "vllm_model", "model_version": "1", "text_output": "Hello!"},
+  {"model_name": "vllm_model", "model_version": "1", "text_output": "Hello! How"},
+  {"model_name": "vllm_model", "model_version": "1", "text_output": "Hello! How can I help?"}
+]

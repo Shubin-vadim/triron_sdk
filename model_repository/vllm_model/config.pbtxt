@@ -1,0 +1,9 @@
+# Minimal vLLM backend model for integration tests. Inputs/outputs are defined by the backend itself.
+backend: "vllm"
+instance_group [{ count: 1, kind: KIND_MODEL }]
+
+# Expose vllm:* metrics (tokens/s, TTFT, KV-cache usage, running/waiting requests) through Triton /metrics
+parameters: {
+  key: "REPORT_CUSTOM_METRICS"
+  value: { string_value: "true" }
+}

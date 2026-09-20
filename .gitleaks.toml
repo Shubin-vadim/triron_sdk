@@ -1,0 +1,8 @@
+title = "triton-sdk"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Self-signed TLS keys used only by unit tests"
+paths = ['''(^|/)triton_sdk/tests/fixtures/certs/''']

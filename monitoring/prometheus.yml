@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  # OpenAI frontend profile: Triton core + vLLM metrics on the frontend port
+  - job_name: triton-openai
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["openai:9000"]
+        labels: { profile: openai }
+  # plain tritonserver profile: metrics on 8002
+  - job_name: triton-native
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["native:8002"]
+        labels: { profile: native }
