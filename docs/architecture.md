@@ -1,4 +1,4 @@
-# Архитектура
+# Architecture
 
 ```
  caller
@@ -15,120 +15,121 @@
                   └─ GrpcTransport  (grpc.aio, ModelInfer / ModelStreamInfer, cancel)
 ```
 
-## Правила слоёв
+## Layer rules
 
-- `client` знает про LLM (prompt, chunks, chat) и про то, как выбрать адаптер. Единственное место композиции.
-- `backends` знают схему тензоров конкретного бэкенда Triton. Не знают про сеть.
-- `transport` знает KServe v2 и ничего про LLM. Все ошибки httpx/grpc заворачиваются в `TritonError`.
-- `core` — модели и константы, импортируются всеми.
+- `client` knows about LLM concerns (prompt, chunks, chat) and how to pick an adapter. The only place where composition happens.
+- `backends` know the tensor schema of a specific Triton backend. They know nothing about the network.
+- `transport` knows KServe v2 and nothing about LLMs. All httpx/grpc errors are wrapped into `TritonError`.
+- `core` — models and constants, imported by everyone.
 
-## Жизненный цикл запроса
+## Request lifecycle
 
-1. `client.generate()` собирает `GenerateRequest`, подставляет модель по умолчанию.
-2. `_resolve_adapter()` берёт `model_config` (кэш) и выбирает адаптер по именам входов, либо использует `TRITON_BACKEND`.
-3. Адаптер строит `list[InferInput]` и список нужных выходов.
-4. Транспорт делает запрос; для стрима — итерирует ответы до `triton_final_response`.
-5. Адаптер превращает `InferResult` в `GenerateChunk` (vLLM: кумулятивный текст → дельта).
-6. Клиент склеивает `GenerateResponse` или отдаёт чанки наружу.
+1. `client.generate()` builds a `GenerateRequest`, substituting the default model.
+2. `_resolve_adapter()` fetches `model_config` (cached) and picks an adapter by input names, or uses `TRITON_BACKEND`.
+3. The adapter builds a `list[InferInput]` and the list of needed outputs.
+4. The transport makes the request; for streaming, it iterates responses up to `triton_final_response`.
+5. The adapter turns `InferResult` into a `GenerateChunk` (vLLM: cumulative text → delta).
+6. The client assembles a `GenerateResponse` or yields chunks outward.
 
-## Отмена и таймауты
+## Cancellation and timeouts
 
-- Не-стриминговые запросы ретраятся (`tenacity`) по `RETRY_STATUSES` и ошибкам соединения.
-- Стрим никогда не ретраится посередине. Клиент оборачивает генератор транспорта в `contextlib.aclosing`,
-  поэтому `break` из `async for` сразу закрывает его: HTTP рвёт соединение, gRPC вызывает `call.cancel()`.
-- `TIMEOUT` — на unary-запрос целиком. `STREAM_TIMEOUT` — максимальная пауза **между двумя событиями** стрима
-  (idle timeout), а не общая длительность: у долгой генерации нет разумного «общего» лимита.
+- Non-streaming requests are retried (`tenacity`) based on `RETRY_STATUSES` and connection errors.
+- A stream is never retried mid-flight. The client wraps the transport's generator in `contextlib.aclosing`,
+  so a `break` out of `async for` closes it immediately: HTTP tears down the connection, gRPC calls `call.cancel()`.
+- `TIMEOUT` applies to the whole unary request. `STREAM_TIMEOUT` is the maximum pause **between two stream events**
+  (idle timeout), not the total duration: a long generation has no reasonable "total" limit.
 
 ## HTTP: infer vs generate_stream
 
-`/v2/models/{m}/infer` не умеет стримить decoupled-модели по HTTP, поэтому `HttpTransport.stream_infer`
-всегда ходит в `/generate_stream` (generate extension, SSE). Отличия двух форматов спрятаны в
-`transport/kserve_json.py`:
+`/v2/models/{m}/infer` cannot stream decoupled models over HTTP, so `HttpTransport.stream_infer`
+always goes to `/generate_stream` (the generate extension, SSE). The differences between the two formats are
+hidden in `transport/kserve_json.py`:
 
 | | `/infer` | `/generate[_stream]` |
 |---|---|---|
-| Тело запроса | `{"inputs": [{name, datatype, shape, data}], "outputs": [...]}` | плоский JSON: `{"text_input": "...", "stream": true}` |
-| Ответ | `{"outputs": [{name, datatype, shape, data}], "parameters": {...}}` | плоский JSON: `{"text_output": "...", "triton_final_response": true}` |
-| Datatype выходов | приходит явно | угадывается по JSON-типу (`DataType.guess`) |
-| Выбор выходов | `outputs` | не поддерживается |
-| Ошибка посередине | — | событие `{"error": "..."}` → `InferenceError` |
+| Request body | `{"inputs": [{name, datatype, shape, data}], "outputs": [...]}` | flat JSON: `{"text_input": "...", "stream": true}` |
+| Response | `{"outputs": [{name, datatype, shape, data}], "parameters": {...}}` | flat JSON: `{"text_output": "...", "triton_final_response": true}` |
+| Output datatype | sent explicitly | guessed from the JSON type (`DataType.guess`) |
+| Output selection | `outputs` | not supported |
+| Mid-stream error | — | `{"error": "..."}` event → `InferenceError` |
 
-Транспорт гарантирует, что **последний** `InferResult` стрима помечен `triton_final_response=True`,
-даже если сервер этот параметр не прислал (lookahead на одно событие).
+The transport guarantees that the **last** `InferResult` of a stream is marked `triton_final_response=True`,
+even if the server didn't send that parameter (one-event lookahead).
 
 ## gRPC: ModelInfer / ModelStreamInfer
 
-`GrpcTransport` использует сгенерированные стабы из `transport/protos/` (коммитим их в репозиторий, чтобы
-пользователям не нужен был `grpcio-tools`; обновление — `scripts/gen_protos.sh <tag>`). Конвертация
-тензоров живёт в `transport/grpc_codec.py`:
+`GrpcTransport` uses generated stubs from `transport/protos/` (committed to the repository so
+users don't need `grpcio-tools`; update via `scripts/gen_protos.sh <tag>`). Tensor conversion
+lives in `transport/grpc_codec.py`:
 
-- Входы уходят как `raw_input_contents` (little-endian, `struct`), это единственный формат, покрывающий FP16/BF16.
-- Выходы принимаются и как `raw_output_contents` (так отвечает Triton), и как типизированные `contents`.
-- Метаданные-заголовки приводятся к нижнему регистру (`Authorization` → `authorization`) — требование gRPC.
-- `stream_infer` пишет один запрос в bidi-стрим и читает ответы до `triton_final_response`; `error_message`
-  в ответе → `InferenceError`. Idle-таймаут реализован через `asyncio.wait_for(call.read(), timeout)`, чтобы
-  семантика совпадала с HTTP. Если генератор закрыт раньше финала — `call.cancel()`, и Triton прекращает генерацию.
+- Inputs go out as `raw_input_contents` (little-endian, via `struct`), the only format that covers FP16/BF16.
+- Outputs are accepted both as `raw_output_contents` (what Triton replies with) and as typed `contents`.
+- Metadata headers are lowercased (`Authorization` → `authorization`) — a gRPC requirement.
+- `stream_infer` writes a single request into a bidi stream and reads responses up to `triton_final_response`;
+  an `error_message` in the response → `InferenceError`. The idle timeout is implemented via
+  `asyncio.wait_for(call.read(), timeout)`, to match HTTP semantics. If the generator is closed before the
+  final response — `call.cancel()`, and Triton stops generating.
 
-## Адаптеры знают схему модели
+## Adapters know the model schema
 
-`detect_backend(config)` / `get_adapter(kind, config)` создают адаптер **с `ModelConfig`**. Это нужно по трём причинам:
+`detect_backend(config)` / `get_adapter(kind, config)` create an adapter **with a `ModelConfig`**. This is needed for three reasons:
 
-1. **Shape.** Ensemble/BLS TRT-LLM имеют `max_batch_size > 0` → тензоры `[1, N]`; vLLM-бэкенд объявляет
-   `max_batch_size: 0` → тензоры `[N]`. Triton отклоняет запрос с неверным рангом.
-2. **Фильтрация входов.** Отправляются только те тензоры, которые модель объявляет в `config.input`
-   (иначе Triton отвечает `unexpected inference input`). Лишние параметры дропаются с `DEBUG`-логом.
-3. **Алиасы.** Имена менялись между релизами бэкенда (`min_length` → `min_tokens`); `resolve_input()` выбирает
-   то, что есть в конфиге.
+1. **Shape.** Ensemble/BLS TRT-LLM have `max_batch_size > 0` → tensors `[1, N]`; the vLLM backend declares
+   `max_batch_size: 0` → tensors `[N]`. Triton rejects a request with the wrong rank.
+2. **Input filtering.** Only tensors that the model declares in `config.input` are sent
+   (otherwise Triton responds with `unexpected inference input`). Extra parameters are dropped with a `DEBUG` log.
+3. **Aliases.** Names have changed between backend releases (`min_length` → `min_tokens`); `resolve_input()` picks
+   whichever is present in the config.
 
-Без конфига (`BackendAdapter()` напрямую) используется каноническая схема бэкенда и `default_batched`.
+Without a config (`BackendAdapter()` directly), the backend's canonical schema and `default_batched` are used.
 
-`request.extra_inputs` — escape hatch для кастомных ансамблей: значения либо готовые `InferInput`, либо скаляр/список.
-Тип для голых значений берётся из `config.input[].data_type` (`TYPE_INT32` → `INT32`), затем из
-`known_input_types` адаптера (`end_id`, `pad_id`, `lora_task_id`, …), и только потом угадывается по JSON-типу.
+`request.extra_inputs` is an escape hatch for custom ensembles: values are either ready-made `InferInput`,
+or a scalar/list. The type for raw values is taken from `config.input[].data_type` (`TYPE_INT32` → `INT32`),
+then from the adapter's `known_input_types` (`end_id`, `pad_id`, `lora_task_id`, …), and only then guessed from the JSON type.
 
-## OpenAI-совместимый фасад (`triton_sdk/openai`)
+## OpenAI-compatible facade (`triton_sdk/openai`)
 
-Тонкий слой над `AsyncTritonLLMClient` / `TritonLLMClient`, ничего не знает о транспорте:
+A thin layer over `AsyncTritonLLMClient` / `TritonLLMClient` that knows nothing about the transport:
 
 ```
 openai kwargs ──convert.to_sampling_params──▶ SamplingParams
 messages      ──convert.to_chat_messages────▶ ChatMessage[] ──chat_template.render──▶ prompt
-GenerateResponse ──convert.to_chat_completion──▶ ChatCompletion (usage через chat_template.count_tokens)
+GenerateResponse ──convert.to_chat_completion──▶ ChatCompletion (usage via chat_template.count_tokens)
 GenerateChunk[]  ──streaming.ChatStreamAssembler──▶ role-chunk, delta-chunks, finish-chunk[, usage-chunk]
 ```
 
-- `types.py` повторяет имена и вложенность `openai.types.*` (`choices[0].message.content`, `choices[0].delta.content`),
-  но это наши pydantic-модели, зависимости от пакета `openai` нет.
-- `usage` есть только при наличии токенайзера (`tokenizer=` → `HFChatTemplate`). `finish_reason="length"` выводится,
-  когда `completion_tokens >= max_tokens`, иначе `"stop"` — бэкенды Triton причину остановки не сообщают.
-- Неподдерживаемое (`tools`, `response_format`, `logit_bias`, `n > 1`) → `UnsupportedParameterError`; безвредное
-  (`user`, `store`, `service_tier`) игнорируется; опечатки → `TypeError`.
-- Сборщики стрима (`streaming/`: `base.py` — общее состояние и подсчёт usage/finish_reason, `chat.py`, `completion.py`) чистые и общие для sync/async — стрим-логика написана один раз.
-- Два движка (`engines/`: `base.py` с протоколом `Engine`, `native.py`, `frontend.py`): `NativeEngine` — всё выше поверх `AsyncTritonLLMClient`; `FrontendEngine` — тело запроса
-  форвардится в `/v1/chat/completions` OpenAI-фронтенда (`frontend.py`, httpx + SSE с `[DONE]`), ответ валидируется
-  в те же типы. Выбор — `protocol="openai"` vs `http|grpc`.
-- Клиенты лежат в `client/`: `async_client.py` (`AsyncOpenAICompatClient`, выбирает движок), `sync_client.py`
-  (`OpenAICompatClient` — тонкая обёртка над async через `core/sync_runner.AsyncRunner`, свой loop в daemon-потоке;
-  тот же runner использует `TritonLLMClient`). Оба лишь собирают движок и разводят по ресурсам — сами ресурсы
-  вынесены на уровень выше, в `resources/` (сосед `client/`, `engines/`, `streaming/`), по типу, как в самом
-  `openai`: `chat.py`, `completions.py`, `models.py`, в каждом sync- и async-вариант рядом.
+- `types.py` mirrors the names and nesting of `openai.types.*` (`choices[0].message.content`, `choices[0].delta.content`),
+  but these are our own pydantic models — there is no dependency on the `openai` package.
+- `usage` is only available when a tokenizer is present (`tokenizer=` → `HFChatTemplate`). `finish_reason="length"`
+  is produced when `completion_tokens >= max_tokens`, otherwise `"stop"` — Triton backends don't report the stop reason.
+- Unsupported (`tools`, `response_format`, `logit_bias`, `n > 1`) → `UnsupportedParameterError`; harmless ones
+  (`user`, `store`, `service_tier`) are ignored; typos → `TypeError`.
+- Stream assemblers (`streaming/`: `base.py` — shared state and usage/finish_reason counting, `chat.py`, `completion.py`) are pure and shared between sync/async — the streaming logic is written once.
+- Two engines (`engines/`: `base.py` with the `Engine` protocol, `native.py`, `frontend.py`): `NativeEngine` is everything above layered over `AsyncTritonLLMClient`; `FrontendEngine` forwards the request body
+  to the OpenAI frontend's `/v1/chat/completions` (`frontend.py`, httpx + SSE with `[DONE]`), and the response is validated
+  into the same types. The choice is `protocol="openai"` vs `http|grpc`.
+- Clients live in `client/`: `async_client.py` (`AsyncOpenAICompatClient`, picks the engine), `sync_client.py`
+  (`OpenAICompatClient` — a thin wrapper over async via `core/sync_runner.AsyncRunner`, running its own loop in a daemon
+  thread; the same runner is used by `TritonLLMClient`). Both only assemble the engine and wire up the resources —
+  the resources themselves live one level up, in `resources/` (a sibling of `client/`, `engines/`, `streaming/`), organized
+  by type just like in `openai` itself: `chat.py`, `completions.py`, `models.py`, each with its sync and async variant side by side.
 
 ## TLS (`transport/tls.py`)
 
-Один `TLSConfig` для всех трёх транспортов, собирается из `TRITON_SSL*`:
+A single `TLSConfig` for all three transports, assembled from `TRITON_SSL*`:
 
-| Настройка | gRPC | HTTP / OpenAI-фронтенд |
+| Setting | gRPC | HTTP / OpenAI frontend |
 |---|---|---|
-| `SSL=true` или `grpcs://` / `https://` в URL | `secure_channel` | схема `https` |
+| `SSL=true` or `grpcs://` / `https://` in the URL | `secure_channel` | `https` scheme |
 | `SSL_ROOT_CERT` | `root_certificates` | `verify=<path>` |
 | `SSL_CLIENT_CERT` / `SSL_CLIENT_KEY` (mTLS) | `certificate_chain` / `private_key` | `cert=(cert, key)` |
 | `SSL_SERVER_NAME_OVERRIDE` | `grpc.ssl_target_name_override` | — |
-| `VERIFY_SSL=false` | **не действует** (gRPC всегда проверяет сертификат сервера; пишем WARNING) | `verify=False` |
+| `VERIFY_SSL=false` | **has no effect** (gRPC always verifies the server certificate; a WARNING is logged) | `verify=False` |
 
-gRPC-цель всегда `host:port` — `grpc_target()` срезает любую схему, которую пользователь скопировал из HTTP-конфига.
-Тесты (`test_tls.py`) поднимают in-process gRPC-сервер на самоподписанных сертификатах из `tests/fixtures/certs`
-(TLS, mTLS, отказ без клиентского сертификата, `server_name_override` через 127.0.0.1).
+The gRPC target is always `host:port` — `grpc_target()` strips any scheme the user may have copied from the HTTP config.
+Tests (`test_tls.py`) spin up an in-process gRPC server with self-signed certificates from `tests/fixtures/certs`
+(TLS, mTLS, rejection without a client certificate, `server_name_override` via 127.0.0.1).
 
-## Что ещё не реализовано (TODO)
+## Not yet implemented (TODO)
 
-- Проверка на живом Triton (см. интеграционные тесты).
+- Verification against a live Triton (see the integration tests).

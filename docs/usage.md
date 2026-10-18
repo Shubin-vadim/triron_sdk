@@ -1,77 +1,77 @@
-# triton-sdk — руководство по использованию
+# triton-sdk — usage guide
 
-SDK для NVIDIA Triton Inference Server, ориентированный на LLM (бэкенды vLLM и TensorRT-LLM). Один публичный
-API поверх HTTP, gRPC и OpenAI-фронтенда Triton. Проверен на Triton 25.08 + vllm_backend.
+SDK for NVIDIA Triton Inference Server, focused on LLMs (vLLM and TensorRT-LLM backends). One public
+API over HTTP, gRPC, and Triton's OpenAI frontend. Verified against Triton 25.08 + vllm_backend.
 
-Содержание:
+Contents:
 
-1. [Установка](#1-установка)
-2. [Какой клиент выбрать](#2-какой-клиент-выбрать)
-3. [Быстрый старт](#3-быстрый-старт)
-4. [Конфигурация](#4-конфигурация)
-5. [`TritonLLMClient` — нативный клиент](#5-tritonllmclient--нативный-клиент)
-6. [`OpenAICompatClient` — интерфейс как у `openai`](#6-openaicompatclient--интерфейс-как-у-openai)
-7. [Параметры генерации](#7-параметры-генерации)
-8. [Стриминг и отмена](#8-стриминг-и-отмена)
-9. [Chat-шаблоны](#9-chat-шаблоны)
-10. [Бэкенды: vLLM и TensorRT-LLM](#10-бэкенды-vllm-и-tensorrt-llm)
-11. [Ошибки, таймауты, ретраи](#11-ошибки-таймауты-ретраи)
-12. [TLS и аутентификация](#12-tls-и-аутентификация)
+1. [Installation](#1-installation)
+2. [Which client to pick](#2-which-client-to-pick)
+3. [Quick start](#3-quick-start)
+4. [Configuration](#4-configuration)
+5. [`TritonLLMClient` — native client](#5-tritonllmclient--native-client)
+6. [`OpenAICompatClient` — interface like `openai`](#6-openaicompatclient--interface-like-openai)
+7. [Generation parameters](#7-generation-parameters)
+8. [Streaming and cancellation](#8-streaming-and-cancellation)
+9. [Chat templates](#9-chat-templates)
+10. [Backends: vLLM and TensorRT-LLM](#10-backends-vllm-and-tensorrt-llm)
+11. [Errors, timeouts, retries](#11-errors-timeouts-retries)
+12. [TLS and authentication](#12-tls-and-authentication)
 13. [Sync vs async](#13-sync-vs-async)
-14. [Тестирование своего кода](#14-тестирование-своего-кода)
-15. [Логирование](#15-логирование)
-16. [Рецепты](#16-рецепты)
-17. [Известные ограничения](#17-известные-ограничения)
+14. [Testing your own code](#14-testing-your-own-code)
+15. [Logging](#15-logging)
+16. [Recipes](#16-recipes)
+17. [Known limitations](#17-known-limitations)
 
 ---
 
-## 1. Установка
+## 1. Installation
 
 ```bash
-pip install triton-sdk              # HTTP-транспорт, минимум зависимостей (httpx, pydantic, tenacity)
-pip install "triton-sdk[grpc]"      # + gRPC (grpcio, protobuf) — рекомендуется для продакшена
-pip install "triton-sdk[chat]"      # + transformers для HF chat-шаблонов и подсчёта usage
+pip install triton-sdk              # HTTP transport, minimal dependencies (httpx, pydantic, tenacity)
+pip install "triton-sdk[grpc]"      # + gRPC (grpcio, protobuf) — recommended for production
+pip install "triton-sdk[chat]"      # + transformers for HF chat templates and usage counting
 pip install "triton-sdk[all]"
 ```
 
-Python ≥ 3.12. gRPC-стабы уже в пакете, `grpcio-tools` не нужен.
+Python ≥ 3.12. gRPC stubs are already in the package, `grpcio-tools` is not needed.
 
-## 2. Какой клиент выбрать
+## 2. Which client to pick
 
-| Задача | Клиент |
+| Task | Client |
 |---|---|
-| Переносите код, написанный под `openai` | `triton_sdk.openai.OpenAICompatClient` |
-| Нужен полный контроль: параметры бэкенда, кастомные тензоры, метаданные, отмена | `triton_sdk.TritonLLMClient` |
-| Асинхронный сервис (FastAPI, aiohttp) | `AsyncTritonLLMClient` / `AsyncOpenAICompatClient` |
+| Porting code written for `openai` | `triton_sdk.openai.OpenAICompatClient` |
+| Need full control: backend parameters, custom tensors, metadata, cancellation | `triton_sdk.TritonLLMClient` |
+| Asynchronous service (FastAPI, aiohttp) | `AsyncTritonLLMClient` / `AsyncOpenAICompatClient` |
 
-И какой протокол:
+And which protocol:
 
-| `protocol=` | Порт | Когда |
+| `protocol=` | Port | When |
 |---|---|---|
-| `"grpc"` | 8001 | **По умолчанию для прода**: в 2–3 раза ниже накладные расходы, отмена генерации на сервере |
-| `"http"` | 8000 | Нет `grpcio`, прокси/ingress только HTTP, отладка через curl |
-| `"openai"` | 9000 | Только `OpenAICompatClient`; Triton запущен с OpenAI-фронтендом; шаблон и `usage` считает сервер |
+| `"grpc"` | 8001 | **Default for production**: 2–3x lower overhead, server-side generation cancellation |
+| `"http"` | 8000 | No `grpcio`, proxy/ingress is HTTP-only, debugging via curl |
+| `"openai"` | 9000 | `OpenAICompatClient` only; Triton runs with the OpenAI frontend; template and `usage` computed by the server |
 
-## 3. Быстрый старт
+## 3. Quick start
 
 ```python
 from triton_sdk import TritonLLMClient, SamplingParams
 
 with TritonLLMClient("localhost:8001", protocol="grpc") as client:
-    client.wait_for_ready("vllm_model", timeout=120)  # модель может грузиться минуты
+    client.wait_for_ready("vllm_model", timeout=120)  # the model may take minutes to load
 
     response = client.generate(
-        "Столица Франции —",
+        "The capital of France is",
         SamplingParams(max_tokens=32, temperature=0.0),
         model="vllm_model",
     )
     print(response.text)
 
-    for chunk in client.stream("Расскажи анекдот", SamplingParams(max_tokens=128), model="vllm_model"):
+    for chunk in client.stream("Tell me a joke", SamplingParams(max_tokens=128), model="vllm_model"):
         print(chunk.text, end="", flush=True)
 ```
 
-Или в стиле `openai`:
+Or in `openai` style:
 
 ```python
 from triton_sdk.openai import OpenAICompatClient
@@ -79,36 +79,36 @@ from triton_sdk.openai import OpenAICompatClient
 client = OpenAICompatClient("localhost:8001", protocol="grpc", tokenizer="Qwen/Qwen2.5-0.5B-Instruct")
 r = client.chat.completions.create(
     model="vllm_model",
-    messages=[{"role": "user", "content": "Привет!"}],
+    messages=[{"role": "user", "content": "Hello!"}],
     max_tokens=64,
 )
 print(r.choices[0].message.content, r.usage.total_tokens)
 ```
 
-Имя модели — имя папки в `model_repository` Triton. Если оно всегда одно, задайте `TRITON_DEFAULT_MODEL` и
-`model=` можно не передавать.
+The model name is the folder name in Triton's `model_repository`. If it's always the same, set
+`TRITON_DEFAULT_MODEL` and you can skip passing `model=`.
 
-## 4. Конфигурация
+## 4. Configuration
 
-Все настройки — переменные окружения с префиксом `TRITON_` (или `.env`); любой параметр конструктора их
-переопределяет. Полный список — `triton_sdk/config/environment/env.sh.template`.
+All settings are environment variables prefixed with `TRITON_` (or `.env`); any constructor parameter
+overrides them. Full list — `triton_sdk/config/environment/env.sh.template`.
 
-| Переменная | По умолчанию | Смысл |
+| Variable | Default | Meaning |
 |---|---|---|
-| `TRITON_URL` | `localhost:8000` | `host:port`; схема `grpcs://` / `https://` включает TLS |
+| `TRITON_URL` | `localhost:8000` | `host:port`; a `grpcs://` / `https://` scheme enables TLS |
 | `TRITON_PROTOCOL` | `http` | `http` / `grpc` / `openai` |
-| `TRITON_DEFAULT_MODEL` | — | модель, если не передана в вызове |
-| `TRITON_BACKEND` | авто | `vllm` / `tensorrt_llm` / `generic` — принудительный выбор адаптера |
-| `TRITON_TIMEOUT` | `60` | таймаут unary-запроса, с |
-| `TRITON_STREAM_TIMEOUT` | `300` | **пауза между чанками** стрима, с (не общая длительность) |
+| `TRITON_DEFAULT_MODEL` | — | model used if none is passed to the call |
+| `TRITON_BACKEND` | auto | `vllm` / `tensorrt_llm` / `generic` — force the adapter choice |
+| `TRITON_TIMEOUT` | `60` | unary request timeout, seconds |
+| `TRITON_STREAM_TIMEOUT` | `300` | **pause between stream chunks**, seconds (not total duration) |
 | `TRITON_CONNECT_TIMEOUT` | `5` | |
-| `TRITON_RETRY_COUNT` / `TRITON_RETRY_START_TIMEOUT` | `3` / `1.0` | ретраи не-стриминговых запросов |
-| `TRITON_TOKEN` | — | отправляется как `Authorization: Bearer …` |
-| `TRITON_EXTRA_HEADERS` | `{}` | JSON-словарь дополнительных заголовков/метаданных |
-| `TRITON_CHAT_TEMPLATE_MODEL` | — | HF tokenizer id для chat-шаблона |
-| `TRITON_SSL*` | — | см. [TLS](#12-tls-и-аутентификация) |
+| `TRITON_RETRY_COUNT` / `TRITON_RETRY_START_TIMEOUT` | `3` / `1.0` | retries for non-streaming requests |
+| `TRITON_TOKEN` | — | sent as `Authorization: Bearer …` |
+| `TRITON_EXTRA_HEADERS` | `{}` | JSON dict of extra headers/metadata |
+| `TRITON_CHAT_TEMPLATE_MODEL` | — | HF tokenizer id for the chat template |
+| `TRITON_SSL*` | — | see [TLS](#12-tls-and-authentication) |
 
-Программно — через `TritonSettings`:
+Programmatically — via `TritonSettings`:
 
 ```python
 from triton_sdk import TritonLLMClient, TritonSettings
@@ -117,69 +117,70 @@ settings = TritonSettings(URL="triton.internal:8001", PROTOCOL="grpc", DEFAULT_M
 client = TritonLLMClient(settings=settings)
 ```
 
-## 5. `TritonLLMClient` — нативный клиент
+## 5. `TritonLLMClient` — native client
 
 ```python
 TritonLLMClient(
-    url: str | None = None,            # иначе TRITON_URL
+    url: str | None = None,            # otherwise TRITON_URL
     *,
-    protocol: "http" | "grpc" | None,  # иначе TRITON_PROTOCOL
-    backend: "vllm" | "tensorrt_llm" | "generic" | None,   # иначе автодетект по конфигу модели
+    protocol: "http" | "grpc" | None,  # otherwise TRITON_PROTOCOL
+    backend: "vllm" | "tensorrt_llm" | "generic" | None,   # otherwise auto-detected from the model config
     settings: TritonSettings | None,
-    chat_template: ChatTemplate | None,  # см. раздел 9
-    transport: TransportInterface | None,  # для тестов: подменить сеть
+    chat_template: ChatTemplate | None,  # see section 9
+    transport: TransportInterface | None,  # for tests: swap out the network
 )
 ```
 
-Методы (у `AsyncTritonLLMClient` те же, но `await`):
+Methods (`AsyncTritonLLMClient` has the same ones, but `await`-ed):
 
-| Метод | Что делает |
+| Method | What it does |
 |---|---|
-| `is_ready(model=None)` | `True`, если сервер (или модель) готов |
-| `wait_for_ready(model=None, timeout=300, interval=2)` | Поллит readiness; `ModelNotReadyError` по таймауту |
-| `model_metadata(model)` / `model_config(model)` | Метаданные и `config.pbtxt` модели (кэшируется) |
-| `list_models()` | Индекс репозитория: имя, версия, состояние |
-| `generate(prompt, params=None, *, model=None, model_version=None, request_id=None, timeout=None, extra_inputs=None, exclude_input_in_output=True)` → `GenerateResponse` | Один ответ целиком |
-| `stream(prompt, params=None, *, model=None, model_version=None, request_id=None, timeout=None, extra_inputs=None, exclude_input_in_output=True)` → итератор `GenerateChunk` | Токены по мере генерации |
-| `chat(messages, params=None, **kw)` / `chat_stream(messages, params=None, **kw)` | То же, но вход — список `ChatMessage`, шаблон применяется на клиенте |
-| `render_chat(messages)` → `str` | Посмотреть промпт после шаблона |
-| `close()` / контекстный менеджер | Закрыть соединения |
+| `is_ready(model=None)` | `True` if the server (or model) is ready |
+| `wait_for_ready(model=None, timeout=300, interval=2)` | Polls readiness; `ModelNotReadyError` on timeout |
+| `model_metadata(model)` / `model_config(model)` | Model metadata and `config.pbtxt` (cached) |
+| `list_models()` | Repository index: name, version, state |
+| `generate(prompt, params=None, *, model=None, model_version=None, request_id=None, timeout=None, extra_inputs=None, exclude_input_in_output=True)` → `GenerateResponse` | A single, complete response |
+| `stream(prompt, params=None, *, model=None, model_version=None, request_id=None, timeout=None, extra_inputs=None, exclude_input_in_output=True)` → iterator of `GenerateChunk` | Tokens as they are generated |
+| `chat(messages, params=None, **kw)` / `chat_stream(messages, params=None, **kw)` | Same, but the input is a list of `ChatMessage`, with the template applied on the client |
+| `render_chat(messages)` → `str` | Preview the prompt after the template is applied |
+| `close()` / context manager | Close connections |
 
-Результаты:
+Results:
 
 ```python
 response.text  # str
-response.finish_reason  # FinishReason.STOP / LENGTH / UNKNOWN (бэкенды Triton причину не сообщают)
-response.cum_log_probs  # float | None, если запрошены log-probs (TRT-LLM)
-response.raw  # сырой ответ бэкенда для отладки
+response.finish_reason  # FinishReason.STOP / LENGTH / UNKNOWN (Triton backends don't report the reason)
+response.cum_log_probs  # float | None, if log-probs were requested (TRT-LLM)
+response.raw  # raw backend response, for debugging
 
-chunk.text  # дельта текста
-chunk.is_final  # последний чанк стрима
+chunk.text  # text delta
+chunk.is_final  # last chunk of the stream
 chunk.log_probs  # list[float] | None
 ```
 
-Важно про decoupled-модели: LLM-модели Triton почти всегда decoupled (стриминговые). Для них `generate()`
-**автоматически** ходит через стриминговый API с `stream=false` и собирает ответ — Triton отклоняет обычный
-unary `infer` для таких моделей. Вам ничего делать не нужно, но в трассировке gRPC вы увидите `ModelStreamInfer`.
+Important note on decoupled models: Triton's LLM models are almost always decoupled (streaming). For these,
+`generate()` **automatically** goes through the streaming API with `stream=false` and assembles the response —
+Triton rejects a plain unary `infer` for such models. You don't need to do anything, but you'll see
+`ModelStreamInfer` in the gRPC trace.
 
-## 6. `OpenAICompatClient` — интерфейс как у `openai`
+## 6. `OpenAICompatClient` — interface like `openai`
 
-Те же пути атрибутов и формы ответов, что у пакета `openai` (зависимости от него нет):
+The same attribute paths and response shapes as the `openai` package (no dependency on it):
 
 ```python
 from triton_sdk.openai import OpenAICompatClient, AsyncOpenAICompatClient
 
 client = OpenAICompatClient(
     "localhost:8001",
-    protocol="grpc",  # "http" | "grpc" — нативный путь; "openai" — фронтенд Triton
-    tokenizer="Qwen/Qwen2.5-0.5B-Instruct",  # HF-шаблон чата + подсчёт usage (нужен extra [chat])
+    protocol="grpc",  # "http" | "grpc" — native path; "openai" — Triton's frontend
+    tokenizer="Qwen/Qwen2.5-0.5B-Instruct",  # HF chat template + usage counting (needs the [chat] extra)
 )
 
 # chat
 r = client.chat.completions.create(model="vllm_model", messages=[...], max_tokens=64, temperature=0.2, stop=["\n\n"])
 r.id, r.model, r.choices[0].message.content, r.choices[0].finish_reason, r.usage.prompt_tokens
 
-# стрим — та же последовательность чанков, что у OpenAI: role → дельты → finish_reason → (usage)
+# streaming — the same chunk sequence as OpenAI: role → deltas → finish_reason → (usage)
 for chunk in client.chat.completions.create(
     model="vllm_model", messages=[...], stream=True, stream_options={"include_usage": True}
 ):
@@ -192,38 +193,38 @@ for chunk in client.chat.completions.create(
 c = client.completions.create(model="vllm_model", prompt="Once upon a time", max_tokens=32)
 c.choices[0].text
 
-# модели
+# models
 [m.id for m in client.models.list().data]
 
-# доступ к нативному клиенту, если нужно что-то за пределами openai-интерфейса
-client.native.model_config("vllm_model")  # None при protocol="openai"
+# access to the native client, if you need something beyond the openai interface
+client.native.model_config("vllm_model")  # None when protocol="openai"
 ```
 
-Поддерживаемые аргументы `create`: `max_tokens` / `max_completion_tokens`, `temperature`, `top_p`, `seed`,
-`stop` (str или list), `presence_penalty`, `frequency_penalty`, `logprobs`, `stream`, `stream_options`,
-`extra_body` (бэкенд-специфичное: `{"top_k": 5, "repetition_penalty": 1.2, "min_tokens": 4, "ignore_eos": True}`).
+Supported `create` arguments: `max_tokens` / `max_completion_tokens`, `temperature`, `top_p`, `seed`,
+`stop` (str or list), `presence_penalty`, `frequency_penalty`, `logprobs`, `stream`, `stream_options`,
+`extra_body` (backend-specific: `{"top_k": 5, "repetition_penalty": 1.2, "min_tokens": 4, "ignore_eos": True}`).
 
-Игнорируются без ошибки: `user`, `metadata`, `store`, `service_tier`, `timeout`, `extra_headers`.
-Вызывают `UnsupportedParameterError`: `tools`, `tool_choice`, `functions`, `response_format`, `logit_bias`,
-`audio`, `n > 1`. Опечатки в именах → `TypeError`.
+Ignored without error: `user`, `metadata`, `store`, `service_tier`, `timeout`, `extra_headers`.
+Raise `UnsupportedParameterError`: `tools`, `tool_choice`, `functions`, `response_format`, `logit_bias`,
+`audio`, `n > 1`. Typos in argument names → `TypeError`.
 
-Различия двух движков:
+Differences between the two engines:
 
 | | `protocol="http" / "grpc"` | `protocol="openai"` |
 |---|---|---|
-| Chat-шаблон | на клиенте (`tokenizer=` или `chat_template=`) | на сервере (`--tokenizer` при запуске фронтенда) |
-| `usage` | считается токенайзером клиента, `None` без `tokenizer=`; расходится с сервером на ±1 токен из-за спецтокенов | точное от сервера |
-| `finish_reason` | `"length"`, если `completion_tokens >= max_tokens`, иначе `"stop"` | от сервера |
-| `native` | доступен | `None` |
-| Работает без OpenAI-фронтенда | да | нет |
+| Chat template | on the client (`tokenizer=` or `chat_template=`) | on the server (`--tokenizer` at frontend startup) |
+| `usage` | computed by the client's tokenizer, `None` without `tokenizer=`; can differ from the server by ±1 token due to special tokens | exact, from the server |
+| `finish_reason` | `"length"` if `completion_tokens >= max_tokens`, otherwise `"stop"` | from the server |
+| `native` | available | `None` |
+| Works without the OpenAI frontend | yes | no |
 
-## 7. Параметры генерации
+## 7. Generation parameters
 
-`SamplingParams` — единый набор для всех бэкендов; `None` = не отправлять, действует дефолт модели.
+`SamplingParams` — a single set for all backends; `None` means "don't send", the model's default applies.
 
 ```python
 SamplingParams(
-    max_tokens=256,  # обязательный бюджет
+    max_tokens=256,  # required budget
     temperature=None,
     top_p=None,
     top_k=None,
@@ -236,87 +237,87 @@ SamplingParams(
     seed=None,
     stop=[],
     bad_words=[],
-    return_log_probs=False,  # TRT-LLM: cum_log_probs + output_log_probs; vLLM: игнорируется
-    ignore_eos=False,  # vLLM: нативно; TRT-LLM: через end_id=-1
+    return_log_probs=False,  # TRT-LLM: cum_log_probs + output_log_probs; vLLM: ignored
+    ignore_eos=False,  # vLLM: native; TRT-LLM: via end_id=-1
 )
 ```
 
-Как поле превращается в тензор конкретного бэкенда — таблица в [backends.md](backends.md). Параметры, которых
-модель не объявляет в конфиге, **не отправляются** (DEBUG-лог), а не ломают запрос.
+How a field turns into a tensor for a specific backend — see the table in [backends.md](backends.md). Parameters
+that a model doesn't declare in its config are **not sent** (a DEBUG log is emitted), rather than breaking the request.
 
-Помимо `params`, `generate()` / `stream()` принимают `model_version=`, `request_id=` (для трассировки),
-`extra_inputs=` (кастомные тензоры, см. рецепты) и `exclude_input_in_output=` (по умолчанию `True` — промпт не
-возвращается в ответе).
+In addition to `params`, `generate()` / `stream()` accept `model_version=`, `request_id=` (for tracing),
+`extra_inputs=` (custom tensors, see recipes), and `exclude_input_in_output=` (defaults to `True` — the prompt is
+not echoed back in the response).
 
-## 8. Стриминг и отмена
+## 8. Streaming and cancellation
 
 ```python
 async for chunk in client.stream(prompt, params, model="vllm_model"):
     print(chunk.text, end="")
     if enough:
-        break  # ← этого достаточно
+        break  # ← this is enough
 ```
 
-- `break` (или закрытие генератора) **отменяет запрос на сервере**: по gRPC вызывается `call.cancel()`, и Triton
-  прекращает генерацию; по HTTP рвётся соединение (vLLM-бэкенд тоже это замечает).
-- Последний чанк всегда помечен `is_final=True`, даже если сервер (HTTP `generate_stream`) маркер не прислал.
-- `timeout` у `stream()` — максимальная пауза между двумя чанками, не общая длительность.
-- Стрим **не ретраится**; `generate()` ретраится по сетевым ошибкам и 5xx/429 (`RETRY_COUNT`).
-- В sync-клиенте `for chunk in client.stream(...)` работает так же; выход из цикла закрывает стрим.
+- `break` (or closing the generator) **cancels the request on the server**: over gRPC `call.cancel()` is called,
+  and Triton stops generating; over HTTP the connection is torn down (the vLLM backend notices this too).
+- The last chunk is always marked `is_final=True`, even if the server (HTTP `generate_stream`) didn't send a marker.
+- `timeout` on `stream()` is the maximum pause between two chunks, not the total duration.
+- A stream is **never retried**; `generate()` is retried on network errors and 5xx/429 (`RETRY_COUNT`).
+- In the sync client, `for chunk in client.stream(...)` works the same way; breaking out of the loop closes the stream.
 
-## 9. Chat-шаблоны
+## 9. Chat templates
 
-vLLM- и TRT-LLM-бэкенды Triton принимают **сырой текст** — шаблон чата нужно применить на клиенте (кроме
-`protocol="openai"`, где это делает фронтенд).
+Triton's vLLM and TRT-LLM backends accept **raw text** — the chat template must be applied on the client
+(except for `protocol="openai"`, where the frontend does it).
 
 ```python
 from triton_sdk.chat import ChatMessage, Role, HFChatTemplate, SimpleChatTemplate
 
-template = HFChatTemplate("Qwen/Qwen2.5-0.5B-Instruct")  # tokenizer.apply_chat_template, extra [chat]
+template = HFChatTemplate("Qwen/Qwen2.5-0.5B-Instruct")  # tokenizer.apply_chat_template, needs the [chat] extra
 client = TritonLLMClient("localhost:8001", protocol="grpc", chat_template=template)
 
 messages = [
-    ChatMessage(role=Role.SYSTEM, content="Отвечай кратко."),
-    ChatMessage(role=Role.USER, content="Что такое Triton?"),
+    ChatMessage(role=Role.SYSTEM, content="Answer concisely."),
+    ChatMessage(role=Role.USER, content="What is Triton?"),
 ]
 client.chat(messages, SamplingParams(max_tokens=64), model="vllm_model")
 ```
 
-- Без `chat_template=` используется `SimpleChatTemplate` (`role: content` построчно) — годится для тестов, но
-  instruct-модели будут отвечать хуже и «продолжать» промпт. Для реальных моделей всегда задавайте HF-шаблон.
-- Свой шаблон — любой объект с `render(messages, *, add_generation_prompt=True) -> str` и
-  `count_tokens(text) -> int | None` (для `usage`).
+- Without `chat_template=`, `SimpleChatTemplate` is used (`role: content` line by line) — fine for tests, but
+  instruct models will respond worse and tend to "continue" the prompt. Always set an HF template for real models.
+- A custom template is any object with `render(messages, *, add_generation_prompt=True) -> str` and
+  `count_tokens(text) -> int | None` (for `usage`).
 
-## 10. Бэкенды: vLLM и TensorRT-LLM
+## 10. Backends: vLLM and TensorRT-LLM
 
-Адаптер выбирается автоматически по `config.pbtxt` модели (имена входов), `TRITON_BACKEND` принудительно.
-Адаптер знает схему модели: строит shape под `max_batch_size`, отправляет только объявленные входы, разрешает
-переименования между версиями (`min_length` → `min_tokens`).
+The adapter is chosen automatically from the model's `config.pbtxt` (input names), or forced via `TRITON_BACKEND`.
+The adapter knows the model schema: it builds the shape to match `max_batch_size`, sends only declared inputs,
+and resolves renames across versions (`min_length` → `min_tokens`).
 
 | | vLLM (`vllm_backend`) | TensorRT-LLM (`ensemble` / `tensorrt_llm_bls`) |
 |---|---|---|
-| Определение | вход `sampling_parameters` или `backend: vllm` | входы `text_input` + `max_tokens` |
-| Параметры | JSON-строка `sampling_parameters` | тензор на параметр |
-| Стрим | дельты | дельты |
-| Статус в SDK | **проверен на живом Triton 25.08** | покрыт unit-тестами, живой прогон на вашем деплое обязателен |
+| Detection | input `sampling_parameters` or `backend: vllm` | inputs `text_input` + `max_tokens` |
+| Parameters | JSON string `sampling_parameters` | one tensor per parameter |
+| Streaming | deltas | deltas |
+| Status in the SDK | **verified against a live Triton 25.08** | covered by unit tests, a live run on your deployment is required |
 
-Подробности и таблица маппинга — [backends.md](backends.md).
+Details and the parameter mapping table — [backends.md](backends.md).
 
-## 11. Ошибки, таймауты, ретраи
+## 11. Errors, timeouts, retries
 
-Наружу выходят только наследники `triton_sdk.TritonError` (`.message`, `.status_code`, `.model`):
+Only subclasses of `triton_sdk.TritonError` (`.message`, `.status_code`, `.model`) are ever raised outward:
 
-| Исключение | Когда |
+| Exception | When |
 |---|---|
-| `TritonConnectionError` | сервер недоступен, разрыв соединения, TLS-рукопожатие не удалось |
-| `TritonTimeoutError` | превышен `TIMEOUT` / пауза в стриме > `STREAM_TIMEOUT` |
-| `ModelNotFoundError` | модель/версия неизвестна (404 / `NOT_FOUND`) |
-| `ModelNotReadyError` | модель грузится; `wait_for_ready` по таймауту |
-| `InferenceError` | бэкенд отверг или не смог выполнить запрос (в т.ч. ошибка посреди стрима) |
-| `StreamCancelledError` | стрим отменён (gRPC `CANCELLED`) |
-| `BackendNotSupportedError` | конфиг модели не подошёл ни одному адаптеру |
-| `MissingDependencyError` | нужен extra: `pip install "triton-sdk[grpc]"` / `[chat]` |
-| `openai.UnsupportedParameterError` | openai-аргумент, который нельзя выразить на Triton |
+| `TritonConnectionError` | server unreachable, connection dropped, TLS handshake failed |
+| `TritonTimeoutError` | `TIMEOUT` exceeded / stream pause > `STREAM_TIMEOUT` |
+| `ModelNotFoundError` | unknown model/version (404 / `NOT_FOUND`) |
+| `ModelNotReadyError` | model is loading; `wait_for_ready` timed out |
+| `InferenceError` | backend rejected or failed to execute the request (including an error mid-stream) |
+| `StreamCancelledError` | stream was cancelled (gRPC `CANCELLED`) |
+| `BackendNotSupportedError` | the model config didn't match any adapter |
+| `MissingDependencyError` | an extra is needed: `pip install "triton-sdk[grpc]"` / `[chat]` |
+| `openai.UnsupportedParameterError` | an openai argument that can't be expressed on Triton |
 
 ```python
 from triton_sdk import TritonError
@@ -332,30 +333,30 @@ except TritonError as exc:
     log.error("triton %s: %s", exc.status_code, exc.message)
 ```
 
-Ретраи: `generate()` повторяет запрос при `TritonConnectionError` и статусах 408/429/500/502/503/504 с
-экспоненциальной паузой (`RETRY_COUNT`, `RETRY_START_TIMEOUT`). Стримы не ретраятся.
+Retries: `generate()` retries the request on `TritonConnectionError` and statuses 408/429/500/502/503/504 with
+exponential backoff (`RETRY_COUNT`, `RETRY_START_TIMEOUT`). Streams are never retried.
 
-## 12. TLS и аутентификация
+## 12. TLS and authentication
 
 ```bash
-export TRITON_URL=grpcs://triton.internal:8001     # схема включает TLS; или TRITON_SSL=true
-export TRITON_SSL_ROOT_CERT=/etc/ssl/corp-ca.pem    # свой CA; пусто = системные корни
+export TRITON_URL=grpcs://triton.internal:8001     # scheme enables TLS; or TRITON_SSL=true
+export TRITON_SSL_ROOT_CERT=/etc/ssl/corp-ca.pem    # custom CA; empty = system roots
 export TRITON_SSL_CLIENT_CERT=/etc/ssl/client.pem   # mTLS
 export TRITON_SSL_CLIENT_KEY=/etc/ssl/client.key
-export TRITON_SSL_SERVER_NAME_OVERRIDE=triton       # если сертификат выписан не на тот host
+export TRITON_SSL_SERVER_NAME_OVERRIDE=triton       # if the certificate isn't issued for this host
 export TRITON_TOKEN=...                             # Authorization: Bearer
 ```
 
-Одни и те же настройки применяются к HTTP, gRPC и OpenAI-фронтенду. `TRITON_VERIFY_SSL=false` отключает
-проверку сертификата **только для HTTP** — gRPC всегда проверяет сервер (SDK предупредит в логе).
+The same settings apply to HTTP, gRPC, and the OpenAI frontend. `TRITON_VERIFY_SSL=false` disables certificate
+verification **for HTTP only** — gRPC always verifies the server (the SDK logs a warning about it).
 
 ## 13. Sync vs async
 
-- `AsyncTritonLLMClient` / `AsyncOpenAICompatClient` — ядро; используйте в asyncio-приложениях.
-- `TritonLLMClient` / `OpenAICompatClient` — обёртки, которые держат свой event loop в фоновом потоке.
-  Безопасно вызывать из обычного кода, **не** вызывайте их из корутины (заблокируете loop).
-- Один клиент — один пул соединений; создавайте его один раз на процесс, а не на запрос. Клиенты
-  потокобезопасны для параллельных вызовов.
+- `AsyncTritonLLMClient` / `AsyncOpenAICompatClient` — the core; use these in asyncio applications.
+- `TritonLLMClient` / `OpenAICompatClient` — wrappers that run their own event loop in a background thread.
+  Safe to call from regular code, but **do not** call them from a coroutine (you'll block the loop).
+- One client = one connection pool; create it once per process, not per request. Clients are
+  thread-safe for concurrent calls.
 
 ```python
 # FastAPI
@@ -368,9 +369,9 @@ async def complete(req: Req):
     return {"text": r.text}
 ```
 
-## 14. Тестирование своего кода
+## 14. Testing your own code
 
-Подмените транспорт — сеть не нужна:
+Swap out the transport — no network needed:
 
 ```python
 from triton_sdk import AsyncTritonLLMClient
@@ -397,31 +398,31 @@ class FakeTransport(TransportInterface):
             parameters={"triton_final_response": True},
         )
 
-    # остальные методы интерфейса — по необходимости
+    # the remaining interface methods — as needed
 
 
 client = AsyncTritonLLMClient(transport=FakeTransport())
 ```
 
-Готовый `FakeTransport` с записью вызовов есть в `triton_sdk/tests/conftest.py` — можно скопировать.
+A ready-made `FakeTransport` that records calls is in `triton_sdk/tests/conftest.py` — feel free to copy it.
 
-## 15. Логирование
+## 15. Logging
 
-SDK пишет в логгеры `triton_sdk.*` и **не трогает** root logger. Для отладки:
+The SDK writes to `triton_sdk.*` loggers and **does not touch** the root logger. For debugging:
 
 ```python
 import logging
 
-logging.getLogger("triton_sdk").setLevel(logging.DEBUG)  # выбор адаптера, дропнутые параметры, отмены
+logging.getLogger("triton_sdk").setLevel(logging.DEBUG)  # adapter selection, dropped parameters, cancellations
 ```
 
-`triton_sdk.config.configure_logging("DEBUG")` — удобный opt-in для скриптов (цветной вывод, глушит httpx/grpc).
+`triton_sdk.config.configure_logging("DEBUG")` is a convenient opt-in for scripts (colored output, quiets httpx/grpc).
 
-## 16. Рецепты
+## 16. Recipes
 
-**Кастомный ансамбль / дополнительные тензоры** — `extra_inputs=`; тип берётся из `config.pbtxt` модели, для
-известных входов TRT-LLM (`end_id`, `pad_id`, `embedding_bias_*`, `lora_task_id`, …) — из таблицы адаптера, иначе
-угадывается по значению. Готовый `InferInput` уходит как есть:
+**Custom ensemble / extra tensors** — `extra_inputs=`; the type is taken from the model's `config.pbtxt`, for
+known TRT-LLM inputs (`end_id`, `pad_id`, `embedding_bias_*`, `lora_task_id`, …) — from the adapter's table, otherwise
+guessed from the value. A ready-made `InferInput` is passed through as-is:
 
 ```python
 from triton_sdk.core.models import DataType, InferInput
@@ -438,24 +439,24 @@ client.generate(
 )
 ```
 
-**Несколько моделей на одном сервере** — один клиент, `model=` в каждом вызове; конфиги кэшируются по имени.
+**Multiple models on one server** — a single client, `model=` on each call; configs are cached per name.
 
-**Выбор версии модели** — `client.generate(..., model_version="2")`; без версии Triton берёт последнюю по
-`version_policy` модели.
+**Choosing a model version** — `client.generate(..., model_version="2")`; without a version Triton picks the
+latest according to the model's `version_policy`.
 
-**Прод-профиль** — gRPC + TLS + `DEFAULT_MODEL` + `STREAM_TIMEOUT` под ваши длины ответов + `RETRY_COUNT=3`;
-клиент создаётся один раз при старте процесса; `wait_for_ready()` в readiness-probe вашего сервиса.
+**Production profile** — gRPC + TLS + `DEFAULT_MODEL` + `STREAM_TIMEOUT` tuned for your response lengths +
+`RETRY_COUNT=3`; create the client once at process startup; use `wait_for_ready()` in your service's readiness probe.
 
-**Нагрузка / бенчмарк** — `examples/load.py --concurrency N --requests M`, метрики в Grafana
+**Load / benchmarking** — `examples/load.py --concurrency N --requests M`, metrics in Grafana
 (`monitoring/README.md`).
 
-## 17. Известные ограничения
+## 17. Known limitations
 
-- `n > 1`, `tools` / function calling, `response_format` (JSON mode), `logit_bias` — не поддерживаются
-  бэкендами Triton через этот SDK; `UnsupportedParameterError`.
-- `usage` на нативном пути — оценка токенайзером клиента (±1–2 токена), без `tokenizer=` — `None`.
-- `finish_reason` от бэкендов не приходит; `"length"` выводится по бюджету токенов.
-- Через Triton не доступны gauge-метрики vLLM (KV-cache, очередь планировщика) — только счётчики/гистограммы.
-- TensorRT-LLM-адаптер не верифицирован на живом сервере (см. раздел 10).
-- Мультимодальные входы (`image`) — только через `extra_inputs`, в openai-фасаде content-parts кроме `text`
-  отклоняются.
+- `n > 1`, `tools` / function calling, `response_format` (JSON mode), `logit_bias` — not supported
+  by Triton backends through this SDK; raises `UnsupportedParameterError`.
+- `usage` on the native path is an estimate from the client's tokenizer (±1–2 tokens), or `None` without `tokenizer=`.
+- `finish_reason` isn't reported by the backends; `"length"` is derived from the token budget.
+- vLLM's gauge metrics (KV-cache, scheduler queue) aren't exposed through Triton — only counters/histograms.
+- The TensorRT-LLM adapter hasn't been verified against a live server (see section 10).
+- Multimodal inputs (`image`) are only supported via `extra_inputs`; in the openai facade, content parts other
+  than `text` are rejected.

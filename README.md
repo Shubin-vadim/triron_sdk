@@ -1,75 +1,75 @@
 # Triton-sdk
 
-Python SDK для NVIDIA Triton Inference Server, ориентированный на LLM-нагрузки
-(TensorRT-LLM и vLLM бэкенды). Один публичный API — `generate` / `stream` / `chat`,
-различия бэкендов и транспортов (HTTP / gRPC) спрятаны внутри.
+Python SDK for NVIDIA Triton Inference Server, focused on LLM workloads
+(TensorRT-LLM and vLLM backends). One public API — `generate` / `stream` / `chat`,
+with backend and transport (HTTP / gRPC) differences hidden inside.
 
 ```python
 from triton_sdk import AsyncTritonLLMClient, SamplingParams
 
 async with AsyncTritonLLMClient("localhost:8001", protocol="grpc") as client:
-    async for chunk in client.stream("llama3", "Привет!", SamplingParams(max_tokens=64)):
+    async for chunk in client.stream("llama3", "Hello!", SamplingParams(max_tokens=64)):
         print(chunk.text, end="")
 ```
 
-## OpenAI-совместимый интерфейс
+## OpenAI-compatible interface
 
-Код, написанный под `openai`, переносится заменой конструктора:
+Code written for `openai` is ported by swapping the constructor:
 
 ```python
 from triton_sdk.openai import OpenAICompatClient
 
 client = OpenAICompatClient("localhost:8001", protocol="grpc", tokenizer="Qwen/Qwen2.5-0.5B-Instruct")
-resp = client.chat.completions.create(model="vllm_model", messages=[{"role": "user", "content": "Привет"}])
+resp = client.chat.completions.create(model="vllm_model", messages=[{"role": "user", "content": "Hello"}])
 resp.choices[0].message.content, resp.usage.total_tokens
 
 for chunk in client.chat.completions.create(model="vllm_model", messages=[...], stream=True):
     chunk.choices[0].delta.content
 ```
 
-Два движка за одним интерфейсом:
+Two engines behind one interface:
 
-- `protocol="http" | "grpc"` — нативный KServe v2, работает с любым Triton; chat-template и `usage` считаются на клиенте.
-- `protocol="openai"` — OpenAI-фронтенд Triton (`/v1/chat/completions`, порт 9000); шаблон и `usage` делает сервер,
-`native` недоступен.
-`usage` считается токенайзером из `tokenizer=` (без него — `None`). `tools`, `response_format`, `n > 1` не поддерживаются
-и вызывают `UnsupportedParameterError`; `extra_body={"top_k": ...}` пробрасывает бэкенд-специфичные параметры.
+- `protocol="http" | "grpc"` — native KServe v2, works with any Triton; the chat template and `usage` are computed on the client.
+- `protocol="openai"` — Triton's OpenAI frontend (`/v1/chat/completions`, port 9000); the template and `usage` are handled by the server,
+`native` is unavailable.
+`usage` is computed by the tokenizer from `tokenizer=` (without it — `None`). `tools`, `response_format`, `n > 1` are not supported
+and raise `UnsupportedParameterError`; `extra_body={"top_k": ...}` forwards backend-specific parameters.
 
 
 
-## Документация
+## Documentation
 
-- [docs/usage.md](docs/usage.md) — **руководство по использованию**: установка, выбор клиента и протокола, конфигурация, стриминг и отмена, chat-шаблоны, ошибки, TLS, рецепты
-- [examples/README.md](examples/README.md) — как обращаться к модели: curl, `openai`, наш SDK
-- [docs/architecture.md](docs/architecture.md) — устройство SDK, слои, решения
-- [docs/backends.md](docs/backends.md) — схемы vLLM / TensorRT-LLM, таблица маппинга параметров
+- [docs/usage.md](docs/usage.md) — **usage guide**: installation, choosing a client and protocol, configuration, streaming and cancellation, chat templates, errors, TLS, recipes
+- [examples/README.md](examples/README.md) — how to talk to the model: curl, `openai`, our SDK
+- [docs/architecture.md](docs/architecture.md) — how the SDK is built, layers, decisions
+- [docs/backends.md](docs/backends.md) — vLLM / TensorRT-LLM schemas, parameter mapping table
 - [monitoring/README.md](monitoring/README.md) — Prometheus + Grafana
 
 
 
-## Структура
+## Structure
 
 
-| Путь                         | Роль                                                                                               |
+| Path                         | Role                                                                                               |
 | ---------------------------- | -------------------------------------------------------------------------------------------------- |
-| `triton_sdk/client/`         | Публичный API: `TritonLLMClient` (sync) и `AsyncTritonLLMClient`                                   |
-| `triton_sdk/transport/`      | Сетевой слой: `TransportInterface` + `HttpTransport` / `GrpcTransport`, SSE-парсер, protobuf-стабы |
-| `triton_sdk/backends/`       | Адаптеры схемы входов/выходов: `tensorrt_llm`, `vllm`, `generic` (generate-endpoint)               |
-| `triton_sdk/chat/`           | Chat-шаблоны: список сообщений → сырой prompt, подсчёт токенов                                     |
-| `triton_sdk/openai/`         | OpenAI-совместимый фасад: `chat.completions`, `completions`, `models` с типами как в `openai`      |
-| `triton_sdk/core/models/`    | Pydantic-модели запросов, ответов, метаданных, тензоров                                            |
-| `triton_sdk/core/constants/` | Протоколы, пути KServe v2, коды ошибок, retry-статусы                                              |
-| `triton_sdk/settings.py`     | `TritonSettings` (`pydantic-settings`, префикс `TRITON_`)                                          |
-| `triton_sdk/exceptions.py`   | Иерархия `TritonError`                                                                             |
-| `triton_sdk/tests/`          | `unit/` (моки транспорта), `integration/` (живой Triton, маркер `integration`)                     |
-| `examples/`                  | Готовые сценарии использования                                                                     |
-| `model_repository/`          | Минимальная vLLM-модель для интеграционных тестов                                                  |
-| `monitoring/`                | Prometheus + Grafana (дашборд Triton LLM), см. `monitoring/README.md`                              |
+| `triton_sdk/client/`         | Public API: `TritonLLMClient` (sync) and `AsyncTritonLLMClient`                                   |
+| `triton_sdk/transport/`      | Network layer: `TransportInterface` + `HttpTransport` / `GrpcTransport`, SSE parser, protobuf stubs |
+| `triton_sdk/backends/`       | Input/output schema adapters: `tensorrt_llm`, `vllm`, `generic` (generate endpoint)               |
+| `triton_sdk/chat/`           | Chat templates: message list → raw prompt, token counting                                     |
+| `triton_sdk/openai/`         | OpenAI-compatible facade: `chat.completions`, `completions`, `models` with types mirroring `openai`      |
+| `triton_sdk/core/models/`    | Pydantic models for requests, responses, metadata, tensors                                            |
+| `triton_sdk/core/constants/` | Protocols, KServe v2 paths, error codes, retry statuses                                              |
+| `triton_sdk/settings.py`     | `TritonSettings` (`pydantic-settings`, `TRITON_` prefix)                                          |
+| `triton_sdk/exceptions.py`   | `TritonError` hierarchy                                                                            |
+| `triton_sdk/tests/`          | `unit/` (transport mocks), `integration/` (live Triton, `integration` marker)                     |
+| `examples/`                  | Ready-made usage scenarios                                                                             |
+| `model_repository/`          | Minimal vLLM model for integration tests                                                             |
+| `monitoring/`                | Prometheus + Grafana (Triton LLM dashboard), see `monitoring/README.md`                              |
 
 
 
 
-## Быстрый старт
+## Quick start
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
@@ -78,30 +78,29 @@ cp triton_sdk/config/environment/env.sh.template env.sh && source env.sh
 ./code_quality_check.sh                                # ruff + mypy + pytest (unit)
 ```
 
-Интеграционные тесты (нужен GPU и Docker с NVIDIA Container Toolkit):
+Integration tests (needs a GPU and Docker with the NVIDIA Container Toolkit):
 
 ```bash
-docker compose --profile openai up -d   # OpenAI-фронтенд + KServe HTTP/gRPC в одном контейнере
+docker compose --profile openai up -d   # OpenAI frontend + KServe HTTP/gRPC in one container
 scripts/wait_for_triton.sh
 pytest -m integration
 ```
 
-Мониторинг (Prometheus + Grafana с готовым дашбордом Triton/vLLM):
+Monitoring (Prometheus + Grafana with a ready-made dashboard for Triton/vLLM):
 
 ```bash
 docker compose --profile openai --profile monitoring up -d   # Grafana: http://localhost:3000
 uv run python examples/load.py --concurrency 8 --requests 200
 ```
 
-Как обращаться к модели (curl / `openai` / наш SDK) — [examples/README.md](examples/README.md),
-`uv run python examples/quickstart.py` прогоняет все пути.
+How to talk to the model (curl / `openai` / our SDK) — [examples/README.md](examples/README.md),
+`uv run python examples/quickstart.py` runs through all paths.
 
-gRPC-стабы генерируются из protobuf Triton: `scripts/gen_protos.sh`.
+gRPC stubs are generated from Triton's protobuf: `scripts/gen_protos.sh`.
 
-## Ключевые решения
+## Key decisions
 
-- Async-ядро, sync-клиент — тонкая обёртка.
-- gRPC предпочтителен для стриминга (decoupled mode) и отмены генерации на сервере.
-- Бэкенд определяется автоматически по `model_config` (имена входов), можно задать явно.
-- Библиотека не настраивает root logger; `triton_sdk.config.configure_logging()` — opt-in для примеров и тестов.
-
+- Async core, sync client — a thin wrapper.
+- gRPC is preferred for streaming (decoupled mode) and server-side generation cancellation.
+- The backend is auto-detected from `model_config` (input names), or can be set explicitly.
+- The library does not configure the root logger; `triton_sdk.config.configure_logging()` is opt-in for examples and tests.

@@ -1,44 +1,44 @@
-# Бэкенды Triton для LLM
+# Triton backends for LLMs
 
 | | TensorRT-LLM (`ensemble` / `tensorrt_llm_bls`) | vLLM (`vllm_backend`) | Generic |
 |---|---|---|---|
-| Определение | есть `max_tokens`, нет `sampling_parameters` | есть `sampling_parameters` или `backend: vllm` | есть `text_input` |
+| Detection | has `max_tokens`, no `sampling_parameters` | has `sampling_parameters` or `backend: vllm` | has `text_input` |
 | Prompt | `text_input` BYTES [1,1] | `text_input` BYTES [1] | `text_input` |
-| Параметры | отдельные тензоры: `max_tokens` INT32, `temperature` FP32, `top_k` INT32, `top_p` FP32, `stop_words` BYTES [1,N], `bad_words`, `end_id`, `pad_id`, `random_seed`, `return_log_probs` BOOL, ... | `sampling_parameters` — JSON-строка (vLLM `SamplingParams`) | `extra_inputs` как есть |
-| Стриминг | `stream` BOOL, decoupled; отдаёт **дельты** | `stream` BOOL, decoupled; отдаёт **дельты** (проверено на 25.08; старые версии — кумулятив, `VLLMAdapter.cumulative_text=True`) | обычно нет |
-| Финальный ответ | `triton_final_response=true`, пустой `text_output` | gRPC: `triton_final_response=true`; `generate_stream`: маркера **нет**, конец SSE (SDK сам помечает последний результат) | один ответ |
-| Выходы | `text_output`, `cum_log_probs`, `output_log_probs`, `sequence_length` | `text_output` | `text_output` |
-| Вход в выходе | `exclude_input_in_output` (в BLS) | `exclude_input_in_output` | — |
+| Parameters | separate tensors: `max_tokens` INT32, `temperature` FP32, `top_k` INT32, `top_p` FP32, `stop_words` BYTES [1,N], `bad_words`, `end_id`, `pad_id`, `random_seed`, `return_log_probs` BOOL, ... | `sampling_parameters` — a JSON string (vLLM `SamplingParams`) | `extra_inputs` as-is |
+| Streaming | `stream` BOOL, decoupled; returns **deltas** | `stream` BOOL, decoupled; returns **deltas** (verified on 25.08; older versions — cumulative, `VLLMAdapter.cumulative_text=True`) | usually none |
+| Final response | `triton_final_response=true`, empty `text_output` | gRPC: `triton_final_response=true`; `generate_stream`: **no marker**, end of SSE (the SDK marks the last result itself) | a single response |
+| Outputs | `text_output`, `cum_log_probs`, `output_log_probs`, `sequence_length` | `text_output` | `text_output` |
+| Input echoed in output | `exclude_input_in_output` (in BLS) | `exclude_input_in_output` | — |
 
-## Маппинг `SamplingParams` → TensorRT-LLM
+## Mapping `SamplingParams` → TensorRT-LLM
 
-| `SamplingParams` | Тензор | Тип | Примечание |
+| `SamplingParams` | Tensor | Type | Note |
 |---|---|---|---|
-| `max_tokens` | `max_tokens` | INT32 | обязательный |
+| `max_tokens` | `max_tokens` | INT32 | required |
 | `temperature` | `temperature` | FP32 | |
 | `top_p` / `top_k` | `top_p` / `top_k` | FP32 / INT32 | |
-| `repetition_penalty`, `presence_penalty`, `frequency_penalty`, `length_penalty` | одноимённые | FP32 | |
-| `min_tokens` | `min_tokens` **или** `min_length` | INT32 | алиас по конфигу модели |
+| `repetition_penalty`, `presence_penalty`, `frequency_penalty`, `length_penalty` | same name | FP32 | |
+| `min_tokens` | `min_tokens` **or** `min_length` | INT32 | alias depending on model config |
 | `beam_width` | `beam_width` | INT32 | |
 | `seed` | `random_seed` | UINT64 | |
 | `stop` | `stop_words` | BYTES `[1, N]` | |
 | `bad_words` | `bad_words` | BYTES `[1, N]` | |
-| `return_log_probs` | `return_log_probs` | BOOL | + запрашиваются выходы `cum_log_probs`, `output_log_probs` |
-| `ignore_eos` | `end_id = -1` | INT32 | у TRT-LLM нет флага; `-1` в executor = «нет стоп-токена». Не отправляется, если `end_id` задан в `extra_inputs` |
+| `return_log_probs` | `return_log_probs` | BOOL | + requests the `cum_log_probs`, `output_log_probs` outputs |
+| `ignore_eos` | `end_id = -1` | INT32 | TRT-LLM has no flag for this; `-1` in the executor means "no stop token". Not sent if `end_id` is already set via `extra_inputs` |
 | `request.stream` | `stream` | BOOL | |
-| `request.exclude_input_in_output` | `exclude_input_in_output` | BOOL | отправляется только если `False` |
-| `request.extra_inputs` | как есть | guess | `end_id`, `pad_id`, `embedding_bias_*`, LoRA и т.д. |
+| `request.exclude_input_in_output` | `exclude_input_in_output` | BOOL | sent only if `False` |
+| `request.extra_inputs` | as-is | guessed | `end_id`, `pad_id`, `embedding_bias_*`, LoRA, etc. |
 
-Незаданные (`None`) параметры не отправляются — работают дефолты модели. Тензоры, которых нет в `config.input`,
-не отправляются.
+Unset (`None`) parameters are not sent — the model's defaults apply. Tensors not present in `config.input`
+are not sent.
 
 ## Generate endpoints
 
-`POST /v2/models/{m}/generate` принимает плоский JSON: `{"text_input": "...", "max_tokens": 32, "stream": false}` —
-каждое поле верхнего уровня становится входным тензором. Это удобно для GenericAdapter и для отладки, но
-для полного контроля (batch, shapes, версии) используем `/infer` и gRPC.
+`POST /v2/models/{m}/generate` accepts flat JSON: `{"text_input": "...", "max_tokens": 32, "stream": false}` —
+every top-level field becomes an input tensor. This is convenient for `GenericAdapter` and for debugging, but
+for full control (batch, shapes, versions) we use `/infer` and gRPC.
 
-## OpenAI-совместимый фронтенд
+## OpenAI-compatible frontend
 
-Если Triton запущен с `--openai-*` фронтендом (`python/openai` в репозитории сервера), проще использовать
-клиент `openai`. Этот SDK нужен для нативного пути: decoupled gRPC, отмена, кастомные ансамбли, метаданные.
+If Triton is running with the `--openai-*` frontend (`python/openai` in the server repository), it's simpler to
+use the `openai` client. This SDK is for the native path: decoupled gRPC, cancellation, custom ensembles, metadata.
