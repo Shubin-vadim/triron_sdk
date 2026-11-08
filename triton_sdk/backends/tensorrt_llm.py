@@ -10,9 +10,9 @@ from __future__ import annotations
 
 import logging
 
-from ..core.constants import FINAL_RESPONSE_PARAM, TEXT_INPUT, TEXT_OUTPUT, BackendKind
-from ..core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
-from .base import BackendAdapter
+from triton_sdk.backends.base import BackendAdapter
+from triton_sdk.core.constants import FINAL_RESPONSE_PARAM, TEXT_INPUT, TEXT_OUTPUT, BackendKind
+from triton_sdk.core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
 
 
 logger = logging.getLogger(__name__)
@@ -97,11 +97,11 @@ class TensorRTLLMAdapter(BackendAdapter):
         self._append(inputs, self._words_tensor("stop_words", params.stop))
         self._append(inputs, self._words_tensor("bad_words", params.bad_words))
 
-        # BOOL flags: only sent when set, so the model's own defaults apply otherwise
+        # Explicitly send the requested echo policy: backend defaults vary by deployment.
         if params.return_log_probs:
             self._append(inputs, self.optional_tensor("return_log_probs", True, DataType.BOOL))  # noqa: FBT003
-        if not request.exclude_input_in_output:
-            self._append(inputs, self.optional_tensor("exclude_input_in_output", False, DataType.BOOL))  # noqa: FBT003
+        exclude = self.optional_tensor("exclude_input_in_output", request.exclude_input_in_output, DataType.BOOL)
+        self._append(inputs, exclude)
         if params.ignore_eos:
             self._append(inputs, self._ignore_eos_tensor(request))
 

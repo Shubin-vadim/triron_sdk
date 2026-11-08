@@ -72,6 +72,7 @@ def test_full_mapping_without_config_uses_canonical_names_and_batched_shapes() -
         "stop_words": (DataType.BYTES, ["\n\n", "###"]),
         "bad_words": (DataType.BYTES, ["badword"]),
         "return_log_probs": (DataType.BOOL, [True]),
+        "exclude_input_in_output": (DataType.BOOL, [True]),
     }
     assert set(inputs) == set(expected)
     for name, (datatype, data) in expected.items():
@@ -83,8 +84,9 @@ def test_full_mapping_without_config_uses_canonical_names_and_batched_shapes() -
 def test_unset_knobs_are_not_sent() -> None:
     request = GenerateRequest(model="ensemble", prompt="hi", params=SamplingParams(max_tokens=8))
     inputs = _by_name(TensorRTLLMAdapter().build_inputs(request))
-    assert set(inputs) == {"text_input", "max_tokens", "stream"}
+    assert set(inputs) == {"text_input", "max_tokens", "stream", "exclude_input_in_output"}
     assert inputs["stream"].data == [False]
+    assert inputs["exclude_input_in_output"].data == [True]
 
 
 def test_exclude_input_in_output_false_is_sent_explicitly() -> None:

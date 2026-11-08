@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import logging
 
-from ..backends import BackendAdapter, detect_backend, get_adapter
-from ..chat import ChatTemplate, SimpleChatTemplate
-from ..core.constants import BackendKind, Protocol
-from ..core.models import ModelConfig
-from ..settings import TritonSettings, get_settings
-from ..transport import TransportInterface, create_transport
-from ..transport.tls import TLSConfig
+from triton_sdk.backends import BackendAdapter, detect_backend, get_adapter
+from triton_sdk.chat import ChatTemplate, SimpleChatTemplate
+from triton_sdk.core.constants import BackendKind, Protocol
+from triton_sdk.core.models import ModelConfig
+from triton_sdk.settings import TritonSettings, get_settings
+from triton_sdk.transport import TransportInterface, create_transport
+from triton_sdk.transport.tls import TLSConfig
 
 
 logger = logging.getLogger(__name__)

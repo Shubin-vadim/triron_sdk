@@ -12,24 +12,24 @@ import logging
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any, TypeVar
 
-from ..core.constants import FINAL_RESPONSE_PARAM
-from ..core.models import InferInput, InferResult, ModelConfig, ModelMetadata, RepositoryModel, ServerMetadata
-from ..core.optional import require_import
-from ..exceptions import (
+from triton_sdk.core.constants import FINAL_RESPONSE_PARAM
+from triton_sdk.core.models import InferInput, InferResult, ModelConfig, ModelMetadata, RepositoryModel, ServerMetadata
+from triton_sdk.core.optional import require_import
+from triton_sdk.exceptions import (
     InferenceError,
     StreamCancelledError,
     TritonTimeoutError,
     from_grpc_status,
 )
-from .base import TransportInterface
-from .tls import TLSConfig, grpc_target
+from triton_sdk.transport.base import TransportInterface
+from triton_sdk.transport.tls import TLSConfig, grpc_target
 
 
 grpc = require_import("grpc", "grpc")  # pragma: no cover - exercised only without the extra
 
-from . import grpc_codec  # noqa: E402 - depends on grpc, imported above
-from .protos import grpc_service_pb2 as pb  # noqa: E402
-from .protos import grpc_service_pb2_grpc as pb_grpc  # noqa: E402
+from triton_sdk.transport import grpc_codec  # noqa: E402 - depends on grpc, imported above
+from triton_sdk.transport.protos import grpc_service_pb2 as pb  # noqa: E402
+from triton_sdk.transport.protos import grpc_service_pb2_grpc as pb_grpc  # noqa: E402
 
 
 logger = logging.getLogger(__name__)

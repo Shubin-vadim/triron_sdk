@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 
-from ..core.constants import FINAL_RESPONSE_PARAM, TEXT_INPUT, TEXT_OUTPUT, BackendKind
-from ..core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
-from ..core.utils import drop_none
-from .base import BackendAdapter
+from triton_sdk.backends.base import BackendAdapter
+from triton_sdk.core.constants import FINAL_RESPONSE_PARAM, TEXT_INPUT, TEXT_OUTPUT, BackendKind
+from triton_sdk.core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
+from triton_sdk.core.utils import drop_none
 
 
 class VLLMAdapter(BackendAdapter):

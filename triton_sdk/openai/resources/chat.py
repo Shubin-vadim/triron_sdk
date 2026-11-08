@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Iterator
 from typing import Any, Literal, overload
 
-from ...core.sync_runner import AsyncRunner
-from ..engines import Engine
-from ..types import ChatCompletion, ChatCompletionChunk
+from triton_sdk.core.sync_runner import AsyncRunner
+from triton_sdk.openai.engines import Engine
+from triton_sdk.openai.types import ChatCompletion, ChatCompletionChunk
 
 
 class AsyncChatCompletions:

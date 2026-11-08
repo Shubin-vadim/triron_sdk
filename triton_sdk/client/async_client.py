@@ -8,8 +8,9 @@ from collections.abc import AsyncIterator
 from contextlib import aclosing
 from typing import Any, Self
 
-from ..chat import ChatMessage
-from ..core.models import (
+from triton_sdk.chat import ChatMessage
+from triton_sdk.client.base import BaseClient
+from triton_sdk.core.models import (
     GenerateChunk,
     GenerateRequest,
     GenerateResponse,
@@ -18,9 +19,8 @@ from ..core.models import (
     RepositoryModel,
     SamplingParams,
 )
-from ..core.utils import build_retrying
-from ..exceptions import ModelNotReadyError
-from .base import BaseClient
+from triton_sdk.core.utils import build_retrying
+from triton_sdk.exceptions import ModelNotReadyError
 
 
 logger = logging.getLogger(__name__)

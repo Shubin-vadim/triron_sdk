@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from ..core.constants import TEXT_INPUT, TEXT_OUTPUT, BackendKind
-from ..core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
-from .base import BackendAdapter
+from triton_sdk.backends.base import BackendAdapter
+from triton_sdk.core.constants import TEXT_INPUT, TEXT_OUTPUT, BackendKind
+from triton_sdk.core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
 
 
 class GenericAdapter(BackendAdapter):

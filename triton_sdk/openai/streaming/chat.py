@@ -7,9 +7,9 @@ empty choices and usage.
 
 from __future__ import annotations
 
-from ...core.models import GenerateChunk
-from ..types import ChatCompletionChunk, ChoiceDelta, ChunkChoice
-from .base import StreamAssemblerBase
+from triton_sdk.core.models import GenerateChunk
+from triton_sdk.openai.streaming.base import StreamAssemblerBase
+from triton_sdk.openai.types import ChatCompletionChunk, ChoiceDelta, ChunkChoice
 
 
 class ChatStreamAssembler(StreamAssemblerBase):

@@ -11,8 +11,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from ..core.constants import BackendKind
-from ..core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
+from triton_sdk.core.constants import BackendKind
+from triton_sdk.core.models import DataType, GenerateChunk, GenerateRequest, InferInput, InferResult, ModelConfig
 
 
 logger = logging.getLogger(__name__)

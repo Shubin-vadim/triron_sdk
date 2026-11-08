@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from ...chat import ChatTemplate
-from ...core.models import FinishReason as SdkFinishReason
-from ...core.models import GenerateChunk, GenerateResponse
-from ..convert import build_usage, finish_reason
-from ..types import CompletionUsage, FinishReason, new_id, now
+from triton_sdk.chat import ChatTemplate
+from triton_sdk.core.models import FinishReason as SdkFinishReason
+from triton_sdk.core.models import GenerateChunk, GenerateResponse
+from triton_sdk.openai.convert import build_usage, finish_reason
+from triton_sdk.openai.types import CompletionUsage, FinishReason, new_id, now
 
 
 class StreamAssemblerBase:

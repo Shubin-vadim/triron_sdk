@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from ..core.optional import require_import
-from .models import ChatMessage
+from triton_sdk.chat.models import ChatMessage
+from triton_sdk.core.optional import require_import
 
 
 class ChatTemplate(Protocol):

@@ -1,4 +1,4 @@
-"""Generate load so the Grafana dashboard has something to show.
+"""Generate concurrent streaming requests and report basic timing statistics.
 
 Run: uv run python examples/load.py --concurrency 8 --requests 100 [--protocol grpc] [--url localhost:8001]
 """

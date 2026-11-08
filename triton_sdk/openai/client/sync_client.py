@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from typing import Any, Self
 
-from ...client import TritonLLMClient
-from ...core.sync_runner import AsyncRunner
-from ..resources import Chat, Completions, Models
-from .async_client import AsyncOpenAICompatClient
+from triton_sdk.client import TritonLLMClient
+from triton_sdk.core.sync_runner import AsyncRunner
+from triton_sdk.openai.client.async_client import AsyncOpenAICompatClient
+from triton_sdk.openai.resources import Chat, Completions, Models
 
 
 class OpenAICompatClient:

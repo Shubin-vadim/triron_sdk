@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from ..frontend import AsyncOpenAIFrontend
-from ..types import ChatCompletion, ChatCompletionChunk, Completion, ModelList
+from triton_sdk.openai.frontend import AsyncOpenAIFrontend
+from triton_sdk.openai.types import ChatCompletion, ChatCompletionChunk, Completion, ModelList
 
 
 class FrontendEngine:

@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 if TYPE_CHECKING:
-    from ..settings import TritonSettings
+    from triton_sdk.settings import TritonSettings
 
 
 logger = logging.getLogger(__name__)

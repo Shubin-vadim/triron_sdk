@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any, Protocol
 
-from ..types import ChatCompletion, ChatCompletionChunk, Completion, ModelList
+from triton_sdk.openai.types import ChatCompletion, ChatCompletionChunk, Completion, ModelList
 
 
 class Engine(Protocol):

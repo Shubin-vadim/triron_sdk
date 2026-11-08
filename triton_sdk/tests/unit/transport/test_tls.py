@@ -70,10 +70,9 @@ async def test_http_transport_switches_to_https_when_tls_enabled() -> None:
 grpc = pytest.importorskip("grpc", reason="grpc extra not installed")
 
 from triton_sdk.exceptions import TritonConnectionError  # noqa: E402
+from triton_sdk.tests.unit.transport.test_grpc import FakeTriton  # noqa: E402
 from triton_sdk.transport.grpc import GrpcTransport  # noqa: E402
 from triton_sdk.transport.protos import grpc_service_pb2_grpc as pb_grpc  # noqa: E402
-
-from .test_grpc import FakeTriton  # noqa: E402
 
 
 def _server_credentials(*, require_client_cert: bool) -> object:

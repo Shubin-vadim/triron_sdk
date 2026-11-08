@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 
-from ..core.constants import LOG_COLORS
-from ..core.optional import try_import
+from triton_sdk.core.constants import LOG_COLORS
+from triton_sdk.core.optional import try_import
 
 
 def configure_logging(level: str = "INFO") -> None:

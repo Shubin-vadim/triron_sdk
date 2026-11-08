@@ -4,15 +4,15 @@ from __future__ import annotations
 
 from typing import Self
 
-from ...chat import ChatTemplate, HFChatTemplate
-from ...client import AsyncTritonLLMClient
-from ...core.constants import BackendKind, Protocol
-from ...settings import TritonSettings, get_settings
-from ...transport import TransportInterface
-from ...transport.tls import TLSConfig
-from ..engines import Engine, FrontendEngine, NativeEngine
-from ..frontend import AsyncOpenAIFrontend
-from ..resources import AsyncChat, AsyncCompletions, AsyncModels
+from triton_sdk.chat import ChatTemplate, HFChatTemplate
+from triton_sdk.client import AsyncTritonLLMClient
+from triton_sdk.core.constants import BackendKind, Protocol
+from triton_sdk.openai.engines import Engine, FrontendEngine, NativeEngine
+from triton_sdk.openai.frontend import AsyncOpenAIFrontend
+from triton_sdk.openai.resources import AsyncChat, AsyncCompletions, AsyncModels
+from triton_sdk.settings import TritonSettings, get_settings
+from triton_sdk.transport import TransportInterface
+from triton_sdk.transport.tls import TLSConfig
 
 
 def _resolve_template(tokenizer: str | None, chat_template: ChatTemplate | None) -> ChatTemplate | None:

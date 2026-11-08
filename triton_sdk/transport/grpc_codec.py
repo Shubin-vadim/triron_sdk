@@ -11,7 +11,7 @@ from typing import Any
 
 from google.protobuf.json_format import MessageToDict
 
-from ..core.models import (
+from triton_sdk.core.models import (
     DataType,
     InferInput,
     InferOutput,
@@ -22,8 +22,8 @@ from ..core.models import (
     ServerMetadata,
     TensorMetadata,
 )
-from ..core.utils import decode_bytes_tensor, encode_bytes_tensor
-from .protos import grpc_service_pb2 as pb
+from triton_sdk.core.utils import decode_bytes_tensor, encode_bytes_tensor
+from triton_sdk.transport.protos import grpc_service_pb2 as pb
 
 
 # struct format codes for fixed-width datatypes (little-endian applied at pack time)

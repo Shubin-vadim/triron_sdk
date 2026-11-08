@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from . import grpc_service_pb2 as grpc__service__pb2
+from triton_sdk.transport.protos import grpc_service_pb2 as grpc__service__pb2
 
 GRPC_GENERATED_VERSION = '1.84.0'
 GRPC_VERSION = grpc.__version__

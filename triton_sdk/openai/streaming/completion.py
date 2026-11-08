@@ -6,9 +6,9 @@ one carries ``finish_reason`` and empty text, optionally followed by a usage-onl
 
 from __future__ import annotations
 
-from ...core.models import GenerateChunk
-from ..types import Completion, CompletionChoice
-from .base import StreamAssemblerBase
+from triton_sdk.core.models import GenerateChunk
+from triton_sdk.openai.streaming.base import StreamAssemblerBase
+from triton_sdk.openai.types import Completion, CompletionChoice
 
 
 class CompletionStreamAssembler(StreamAssemblerBase):

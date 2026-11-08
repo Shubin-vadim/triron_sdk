@@ -5,7 +5,7 @@ from __future__ import annotations
 import importlib
 from types import ModuleType
 
-from ..exceptions import MissingDependencyError
+from triton_sdk.exceptions import MissingDependencyError
 
 
 def require_import(name: str, extra: str) -> ModuleType:

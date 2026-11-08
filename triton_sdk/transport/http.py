@@ -13,20 +13,20 @@ from typing import Any
 
 import httpx
 
-from ..core.constants import Endpoint, versioned
-from ..core.models import InferInput, InferResult, ModelConfig, ModelMetadata, RepositoryModel, ServerMetadata
-from ..core.utils import is_loopback_url, normalize_url
-from ..exceptions import TritonConnectionError, TritonTimeoutError, from_http_status
-from .base import TransportInterface
-from .kserve_json import (
+from triton_sdk.core.constants import Endpoint, versioned
+from triton_sdk.core.models import InferInput, InferResult, ModelConfig, ModelMetadata, RepositoryModel, ServerMetadata
+from triton_sdk.core.utils import is_loopback_url, normalize_url
+from triton_sdk.exceptions import TritonConnectionError, TritonTimeoutError, from_http_status
+from triton_sdk.transport.base import TransportInterface
+from triton_sdk.transport.kserve_json import (
     build_generate_body,
     build_infer_body,
     mark_final,
     parse_generate_event,
     parse_infer_response,
 )
-from .sse import parse_sse
-from .tls import TLSConfig
+from triton_sdk.transport.sse import parse_sse
+from triton_sdk.transport.tls import TLSConfig
 
 
 logger = logging.getLogger(__name__)

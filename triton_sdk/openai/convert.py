@@ -5,11 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..chat import ChatMessage, ChatTemplate, Role
-from ..core.models import FinishReason as SdkFinishReason
-from ..core.models import GenerateResponse, SamplingParams
-from ..exceptions import TritonError
-from .types import (
+from triton_sdk.chat import ChatMessage, ChatTemplate, Role
+from triton_sdk.core.models import FinishReason as SdkFinishReason
+from triton_sdk.core.models import GenerateResponse, SamplingParams
+from triton_sdk.exceptions import TritonError
+from triton_sdk.openai.types import (
     ChatCompletion,
     ChatCompletionMessage,
     Choice,

@@ -5,11 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from ...client import AsyncTritonLLMClient
-from ..convert import to_chat_completion, to_chat_messages, to_completion, to_sampling_params
-from ..streaming import ChatStreamAssembler, CompletionStreamAssembler
-from ..types import ChatCompletion, ChatCompletionChunk, Completion, Model, ModelList
-from .base import include_usage
+from triton_sdk.client import AsyncTritonLLMClient
+from triton_sdk.openai.convert import to_chat_completion, to_chat_messages, to_completion, to_sampling_params
+from triton_sdk.openai.engines.base import include_usage
+from triton_sdk.openai.streaming import ChatStreamAssembler, CompletionStreamAssembler
+from triton_sdk.openai.types import ChatCompletion, ChatCompletionChunk, Completion, Model, ModelList
 
 
 class NativeEngine:

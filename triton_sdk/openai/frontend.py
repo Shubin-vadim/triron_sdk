@@ -11,10 +11,10 @@ from typing import Any
 
 import httpx
 
-from ..core.utils import is_loopback_url, normalize_url
-from ..exceptions import TritonConnectionError, TritonTimeoutError, from_http_status
-from ..transport.sse import parse_sse
-from ..transport.tls import TLSConfig
+from triton_sdk.core.utils import is_loopback_url, normalize_url
+from triton_sdk.exceptions import TritonConnectionError, TritonTimeoutError, from_http_status
+from triton_sdk.transport.sse import parse_sse
+from triton_sdk.transport.tls import TLSConfig
 
 
 CHAT_COMPLETIONS = "/v1/chat/completions"

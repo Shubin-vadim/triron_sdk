@@ -1,8 +1,8 @@
 """Resource namespaces (``client.chat``, ``client.completions``, ``client.models``), async and sync."""
 
-from .chat import AsyncChat, AsyncChatCompletions, Chat, ChatCompletions
-from .completions import AsyncCompletions, Completions
-from .models import AsyncModels, Models
+from triton_sdk.openai.resources.chat import AsyncChat, AsyncChatCompletions, Chat, ChatCompletions
+from triton_sdk.openai.resources.completions import AsyncCompletions, Completions
+from triton_sdk.openai.resources.models import AsyncModels, Models
 
 
 __all__ = [
