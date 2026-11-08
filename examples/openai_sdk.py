@@ -1,11 +1,12 @@
 """Smoke test through the official `openai` package against Triton's OpenAI frontend.
 
-Run (after `docker compose --profile openai up -d`):
+Run against a running Triton OpenAI frontend (defaults to http://localhost:9000):
     uv run --with openai python examples/openai_sdk.py
 """
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 
@@ -19,13 +20,16 @@ except ImportError as exc:  # pragma: no cover - example script
     raise SystemExit(msg) from exc
 
 
-BASE_URL = "http://localhost:9000/v1"
-MODEL = "vllm_model"
+OPENAI_URL = (os.environ.get("TRITON_OPENAI_URL") or "localhost:9000").rstrip("/")
+if "://" not in OPENAI_URL:
+    OPENAI_URL = f"http://{OPENAI_URL}"
+BASE_URL = f"{OPENAI_URL}/v1"
+MODEL = os.environ.get("TRITON_DEFAULT_MODEL") or "vllm_model"
 READY_TIMEOUT = 120.0
 
 
 def wait_for_frontend(client: OpenAI, timeout: float = READY_TIMEOUT) -> list[str]:
-    """Poll GET /v1/models until the frontend is up; 503 is Docker/proxy still binding port 9000."""
+    """Poll GET /v1/models until the frontend is ready."""
     deadline = time.monotonic() + timeout
     last: BaseException | None = None
     while time.monotonic() < deadline:

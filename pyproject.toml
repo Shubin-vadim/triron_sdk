@@ -10,11 +10,22 @@ exclude = ["triton_sdk.tests*"]
 triton_sdk = ["py.typed"]
 
 [project]
-name = "triton-sdk"
+name = "triton-inference-sdk"
 version = "0.1.0"
 description = "Python SDK for NVIDIA Triton Inference Server focused on LLM workloads (TensorRT-LLM, vLLM)"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+authors = [
+    { name = "Shubin Vadim", email = "midavnibush@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 dependencies = [
     "httpx~=0.28.1",
     "pydantic~=2.12.3",
@@ -22,10 +33,14 @@ dependencies = [
     "tenacity>=9.0.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Shubin-vadim/triron_sdk"
+Repository = "https://github.com/Shubin-vadim/triron_sdk"
+
 [project.optional-dependencies]
 grpc = ["grpcio>=1.66", "protobuf>=5.28"]
 chat = ["transformers>=4.45", "jinja2~=3.1.6"]
-all = ["triton-sdk[grpc,chat]"]
+all = ["triton-inference-sdk[grpc,chat]"]
 
 [dependency-groups]
 dev = [
@@ -90,5 +105,5 @@ asyncio_mode = "auto"
 testpaths = ["triton_sdk/tests"]
 addopts = "-m 'not integration'"
 markers = [
-    "integration: requires a running Triton Inference Server (see docker-compose.yml)",
+    "integration: requires a running Triton Inference Server",
 ]

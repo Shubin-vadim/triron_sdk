@@ -1,6 +1,7 @@
 """Call the same model every way the SDK supports and print answers + timings.
 
-Run: uv run python examples/quickstart.py   (expects docker compose --profile openai up -d)
+Run against a Triton server with native HTTP and gRPC endpoints. Optionally set
+TRITON_OPENAI_URL to also exercise an OpenAI-compatible frontend.
 """
 
 from __future__ import annotations
@@ -15,9 +16,11 @@ from triton_sdk.chat import ChatMessage, Role
 from triton_sdk.openai import AsyncOpenAICompatClient
 
 
-MODEL = os.environ.get("TRITON_DEFAULT_MODEL", "vllm_model")
-TOKENIZER = os.environ.get("TRITON_CHAT_TEMPLATE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
-HTTP, GRPC, OPENAI = "localhost:8000", "localhost:8001", "localhost:9000"
+MODEL = os.environ.get("TRITON_DEFAULT_MODEL") or "vllm_model"
+TOKENIZER = os.environ.get("TRITON_CHAT_TEMPLATE_MODEL") or "Qwen/Qwen2.5-0.5B-Instruct"
+HTTP = os.environ.get("TRITON_URL", "localhost:8000")
+GRPC = os.environ.get("TRITON_GRPC_URL", "localhost:8001")
+OPENAI = os.environ.get("TRITON_OPENAI_URL")
 QUESTION = "Name one planet of the Solar System. Answer with one word."
 PARAMS = SamplingParams(max_tokens=16, temperature=0.0)
 
@@ -85,7 +88,8 @@ async def main() -> None:
     await native("http", HTTP)
     await native("grpc", GRPC)
     await openai_compat("grpc", GRPC)
-    await openai_compat("openai", OPENAI)
+    if OPENAI:
+        await openai_compat("openai", OPENAI)
 
 
 if __name__ == "__main__":

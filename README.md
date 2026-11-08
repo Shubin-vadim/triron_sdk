@@ -34,58 +34,36 @@ Install the SDK, optional dependencies, and development dependencies in one comm
 uv sync --all-extras --dev
 ```
 
-This installs `triton-sdk` into the project's `.venv` on your computer. It does **not**
-install Triton Inference Server or vLLM: the SDK is a client, and it sends requests to a
-Triton server where a model is already running. You do not need Triton or vLLM installed
-on the computer running the SDK.
+This installs the `triton-inference-sdk` distribution into the project's `.venv`; import it
+in Python as `triton_sdk`. It does **not** install Triton Inference Server or vLLM: the
+SDK is a client, and it sends requests to a Triton server where a model is already
+running. You do not need Triton or vLLM installed on the computer running the SDK.
 
-### Start a local Triton server
+### Prepare Triton and an LLM model
 
-The repository includes a Docker Compose setup for Triton with the vLLM backend and a
-sample Qwen2.5-0.5B-Instruct model. The server and model run in Docker; they are not
-installed into the SDK's Python environment.
+If you do not already have a Triton deployment, follow NVIDIA's
+[Triton Server Quickstart](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/getting_started/quickstart.html)
+to install and start the server. A running Triton process alone is not enough: it must
+also have an LLM backend installed and a compatible model configured and loaded in its
+model repository. The SDK cannot install or load these server-side components for you.
 
-You need Docker with the Compose plugin and an NVIDIA GPU accessible to Docker. On Linux,
-install the NVIDIA driver and [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
-For Windows, use Docker Desktop with GPU support through WSL2. Verify GPU access:
+Choose the backend you plan to use and follow its setup guide:
 
-```bash
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
-```
+- **vLLM:** NVIDIA's [Triton vLLM backend guide](https://github.com/triton-inference-server/vllm_backend)
+  covers the backend-enabled container and sample model repository.
+- **TensorRT-LLM:** NVIDIA's [TensorRT-LLM backend Getting Started guide](https://github.com/triton-inference-server/tensorrtllm_backend#getting-started)
+  covers the compatible container, model configuration, and server launch. Match the
+  container and NVIDIA driver to your GPU; gated Hugging Face models may require a token.
 
-From the repository directory, start Triton:
+After following the backend guide, confirm the model is loaded and ready in Triton.
+Then use its server address and Triton model name in the example below. The model's input
+schema must be supported by this SDK.
 
-```bash
-docker compose --profile openai up -d
-docker compose logs -f openai
-```
+### Connect to your Triton server
 
-The first start downloads the model weights and may take a while. Wait until the logs show
-that `vllm_model` is ready, then press Ctrl+C to stop following the logs (the server keeps
-running). In a second terminal, run the SDK example:
-
-```bash
-uv run python examples/quickstart.py
-```
-
-The sample model is public, so no Hugging Face token is needed. The model name used by the
-SDK is `vllm_model`. The server exposes HTTP on port 8000, gRPC on port 8001, and its
-OpenAI frontend on port 9000. Stop it when done:
-
-```bash
-docker compose --profile openai down
-```
-
-To run Triton without the OpenAI frontend, use `docker compose --profile native up -d`
-instead. The included Compose setup covers vLLM only. A TensorRT-LLM server requires its
-own Triton deployment and model repository; see the
-[Triton TensorRT-LLM backend documentation](https://github.com/triton-inference-server/tensorrtllm_backend).
-
-### Connect to an existing Triton server instead
-
-Connect to an existing Triton server and pass the **Triton model name** configured
-on that server. This can be a vLLM model or a TensorRT-LLM ensemble/BLS model with a
-supported text-input schema; it is not necessarily the Hugging Face model ID.
+Once a Triton server is prepared, connect to it and pass the **Triton model name**
+configured on that server. This can be a vLLM model or a TensorRT-LLM ensemble/BLS model
+with a supported text-input schema; it is not necessarily the Hugging Face model ID.
 
 ```python
 from triton_sdk import SamplingParams, TritonLLMClient
@@ -106,20 +84,34 @@ with TritonLLMClient("your-triton-host:8001", protocol="grpc") as client:
         print(chunk.text, end="", flush=True)
 ```
 
-Save the code above as `quickstart.py`, replace the example server address and model name,
-then run it:
+To run the repository's end-to-end example, set `TRITON_DEFAULT_MODEL` to your Triton
+model name and run:
 
-```bash
-uv run python quickstart.py
+PowerShell:
+
+```powershell
+$env:TRITON_DEFAULT_MODEL = "your-triton-model-name"
+uv run python examples/quickstart.py
 ```
 
-Use the server's HTTP port and `protocol="http"` for HTTP. Streaming requires a model
-configured for streaming; HTTP streaming also requires Triton's generate extension.
-The SDK reads model configuration from the server to select an adapter. For chat, use
-the model's appropriate chat template.
+On Linux/macOS:
 
-The included `model_repository/` and Docker Compose setup are optional; they are not needed
-when connecting to your own server. The SDK does not create or deploy models on Triton.
+```bash
+export TRITON_DEFAULT_MODEL=your-triton-model-name
+uv run python examples/quickstart.py
+```
+
+The example uses HTTP at `localhost:8000` and gRPC at `localhost:8001` by default; set
+`TRITON_URL` and `TRITON_GRPC_URL` to override them. Set `TRITON_OPENAI_URL` to the
+address of an OpenAI-compatible Triton frontend to exercise that protocol too; otherwise,
+that part of the example is skipped. The example requires both native HTTP and gRPC
+endpoints, and a model configured for streaming (HTTP streaming also requires Triton's
+generate extension). It uses the Qwen2.5-0.5B-Instruct tokenizer by default for chat;
+set `TRITON_CHAT_TEMPLATE_MODEL` to a tokenizer matching your model. The first run may
+download the tokenizer from Hugging Face.
+The SDK reads model configuration from the server to select an adapter.
+
+The SDK does not install or launch Triton, backends, or models.
 
 ## OpenAI-compatible interface
 
@@ -144,6 +136,16 @@ Two engines behind one interface:
   `usage` is computed by the tokenizer from `tokenizer=` (without it — `None`). `tools`, `response_format`, `n > 1` are not supported
   and raise `UnsupportedParameterError`; `extra_body={"top_k": ...}` forwards backend-specific parameters.
 
+To run the standalone example against an already-running OpenAI-compatible Triton frontend
+(defaults to `localhost:9000`, model `vllm_model`):
+
+```bash
+uv run --with openai python examples/openai_sdk.py
+```
+
+Set `TRITON_OPENAI_URL` and `TRITON_DEFAULT_MODEL` first if your frontend or model uses a
+different address or name.
+
 ## Structure
 
 | Path                           | Role                                                                                                        |
@@ -159,20 +161,22 @@ Two engines behind one interface:
 | `triton_sdk/exceptions.py`   | `TritonError` hierarchy                                                                                   |
 | `triton_sdk/tests/`          | `unit/` (transport mocks), `integration/` (live Triton, `integration` marker)                         |
 | `examples/`                  | Ready-made usage scenarios                                                                                  |
-| `model_repository/`          | Optional local Triton model configuration for examples and integration tests                                |
+| `model_repository/`          | Example vLLM model configuration for a Triton deployment                                                     |
 
-## Local development and test server
-
-The repository includes a `vllm_model` configuration for Qwen2.5-0.5B-Instruct. It contains
-configuration files, not model weights. Docker Compose mounts it into the test server; the
-vLLM backend downloads the weights to the `hf-cache` volume if they are not already present.
-This local setup is separate from any model repository on your own Triton server.
+## Local development and integration tests
 
 ```bash
 uv sync --all-extras --dev
 cp triton_sdk/config/environment/env.sh.template env.sh && source env.sh
 ./code_quality_check.sh                                # ruff + mypy + pytest (unit)
 ```
+
+Integration tests require a separately running Triton server and a vLLM model named
+`vllm_model`, with native HTTP and gRPC endpoints. Configure the HTTP server address in
+`env.sh`, then run `pytest -m integration`. The template sets the model name to
+`vllm_model`; change it if your server uses another name. Set `TRITON_GRPC_URL` and
+`TRITON_OPENAI_URL` when those endpoints use non-default addresses. Tests for Triton's
+OpenAI frontend are skipped when the frontend is unavailable.
 
 ## License
 

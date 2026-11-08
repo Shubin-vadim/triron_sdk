@@ -1307,7 +1307,7 @@ wheels = [
 ]
 
 [[package]]
-name = "triton-sdk"
+name = "triton-inference-sdk"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -1357,7 +1357,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = "~=2.12.0" },
     { name = "tenacity", specifier = ">=9.0.0" },
     { name = "transformers", marker = "extra == 'chat'", specifier = ">=4.45" },
-    { name = "triton-sdk", extras = ["grpc", "chat"], marker = "extra == 'all'" },
+    { name = "triton-inference-sdk", extras = ["grpc", "chat"], marker = "extra == 'all'" },
 ]
 provides-extras = ["grpc", "chat", "all"]
 

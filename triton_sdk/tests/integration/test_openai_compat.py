@@ -15,11 +15,11 @@ from triton_sdk.settings import TritonSettings
 
 pytestmark = pytest.mark.integration
 
-MODEL = os.environ.get("TRITON_DEFAULT_MODEL", "vllm_model")
+MODEL = os.environ.get("TRITON_DEFAULT_MODEL") or "vllm_model"
 TOKENIZER = os.environ.get("TRITON_CHAT_TEMPLATE_MODEL", "Qwen/Qwen2.5-0.5B-Instruct")
 HTTP_URL = os.environ.get("TRITON_URL", "localhost:8000")
 GRPC_URL = os.environ.get("TRITON_GRPC_URL", "localhost:8001")
-OPENAI_URL = os.environ.get("TRITON_OPENAI_URL", "localhost:9000")
+OPENAI_URL = os.environ.get("TRITON_OPENAI_URL") or "localhost:9000"
 MESSAGES = [
     {"role": "system", "content": "You are terse."},
     {"role": "user", "content": "Name one planet."},
@@ -37,7 +37,7 @@ def _frontend_available() -> bool:
 async def client(request: pytest.FixtureRequest) -> AsyncIterator[AsyncOpenAICompatClient]:
     protocol = Protocol(request.param)
     if protocol is Protocol.OPENAI and not _frontend_available():
-        pytest.skip("OpenAI frontend not running (docker compose --profile openai)")
+        pytest.skip("Triton OpenAI frontend is not available")
     url = {Protocol.HTTP: HTTP_URL, Protocol.GRPC: GRPC_URL, Protocol.OPENAI: OPENAI_URL}[protocol]
     settings = TritonSettings(URL=url, PROTOCOL=protocol, DEFAULT_MODEL=MODEL, _env_file=None)  # type: ignore[call-arg]
     tokenizer = TOKENIZER if protocol is not Protocol.OPENAI else None

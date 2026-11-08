@@ -1,4 +1,4 @@
-"""Live tests against docker-compose Triton (vLLM backend). Run: pytest -m integration."""
+"""Live tests against a Triton server with a vLLM model. Run: pytest -m integration."""
 
 from collections.abc import AsyncIterator
 
