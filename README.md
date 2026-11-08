@@ -15,29 +15,33 @@ Key features:
 
 ## Quick start
 
-Clone the repository:
+Python 3.12 or newer is required. Choose one of these installation options.
+
+**Install the latest published release from PyPI** with pip:
+
+```bash
+python -m pip install "triton-inference-sdk[all]"
+```
+
+With `uv`:
+
+```bash
+uv add "triton-inference-sdk[all]"
+```
+
+**Install directly from GitHub** to use the latest code in the repository, which may be
+newer than the latest PyPI release:
 
 ```bash
 git clone https://github.com/Shubin-vadim/triron_sdk.git
 cd triron_sdk
+uv sync --all-extras
 ```
 
-Python 3.12 or newer is required. If `uv` is not installed, install it with pip:
-
-```bash
-python -m pip install uv
-```
-
-Install the SDK, optional dependencies, and development dependencies in one command:
-
-```bash
-uv sync --all-extras --dev
-```
-
-This installs the `triton-inference-sdk` distribution into the project's `.venv`; import it
-in Python as `triton_sdk`. It does **not** install Triton Inference Server or vLLM: the
-SDK is a client, and it sends requests to a Triton server where a model is already
-running. You do not need Triton or vLLM installed on the computer running the SDK.
+The package distribution is named `triton-inference-sdk`; import it in Python as
+`triton_sdk`. Both installation options install the SDK and its optional client-side
+dependencies, not Triton Inference Server, a backend, or model weights. The SDK sends
+requests to a Triton server where a compatible model is already running.
 
 ### Prepare Triton and an LLM model
 
@@ -161,22 +165,7 @@ different address or name.
 | `triton_sdk/exceptions.py`   | `TritonError` hierarchy                                                                                   |
 | `triton_sdk/tests/`          | `unit/` (transport mocks), `integration/` (live Triton, `integration` marker)                         |
 | `examples/`                  | Ready-made usage scenarios                                                                                  |
-| `model_repository/`          | Example vLLM model configuration for a Triton deployment                                                     |
-
-## Local development and integration tests
-
-```bash
-uv sync --all-extras --dev
-cp triton_sdk/config/environment/env.sh.template env.sh && source env.sh
-./code_quality_check.sh                                # ruff + mypy + pytest (unit)
-```
-
-Integration tests require a separately running Triton server and a vLLM model named
-`vllm_model`, with native HTTP and gRPC endpoints. Configure the HTTP server address in
-`env.sh`, then run `pytest -m integration`. The template sets the model name to
-`vllm_model`; change it if your server uses another name. Set `TRITON_GRPC_URL` and
-`TRITON_OPENAI_URL` when those endpoints use non-default addresses. Tests for Triton's
-OpenAI frontend are skipped when the frontend is unavailable.
+| `model_repository/`          | Example vLLM model configuration for a Triton deployment                                                    |
 
 ## License
 
