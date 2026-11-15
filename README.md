@@ -167,6 +167,20 @@ different address or name.
 | `examples/`                  | Ready-made usage scenarios                                                                                  |
 | `model_repository/`          | Example vLLM model configuration for a Triton deployment                                                    |
 
+## Releasing
+
+Pushing a `v*` tag triggers the `release.yml` workflow: it builds the package,
+publishes it to PyPI via Trusted Publishing, and creates a GitHub Release with
+the built distributions attached. The tag must match `version` in `pyproject.toml`.
+
+```bash
+# 1. Bump `version` in pyproject.toml, then:
+git add pyproject.toml
+git commit -m "Bump version to 0.1.1"
+git tag v0.1.1
+git push origin main --tags
+```
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
