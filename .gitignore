@@ -21,6 +21,8 @@ logs/
 .idea/
 .vscode/*
 !.vscode/settings.json
+.cursor/
+.gitlab/
 .DS_Store
 
 # Models / artifacts (integration tests mount them, never commit weights)

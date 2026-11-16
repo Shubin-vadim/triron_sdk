@@ -33,8 +33,8 @@ uv add "triton-inference-sdk[all]"
 newer than the latest PyPI release:
 
 ```bash
-git clone https://github.com/Shubin-vadim/triron_sdk.git
-cd triron_sdk
+git clone https://github.com/Shubin-vadim/triton_inference_sdk.git
+cd triton_inference_sdk
 uv sync --all-extras
 ```
 

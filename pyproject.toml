@@ -34,8 +34,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/Shubin-vadim/triron_sdk"
-Repository = "https://github.com/Shubin-vadim/triron_sdk"
+Homepage = "https://github.com/Shubin-vadim/triton_inference_sdk"
+Repository = "https://github.com/Shubin-vadim/triton_inference_sdk"
 
 [project.optional-dependencies]
 grpc = ["grpcio>=1.66", "protobuf>=5.28"]
